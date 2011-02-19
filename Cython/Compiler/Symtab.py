@@ -1409,9 +1409,6 @@ class StructOrUnionScope(Scope):
         if type.is_pyobject and not allow_pyobject:
             error(pos,
                   "C struct/union member cannot be a Python object")
-        if visibility != 'private':
-            error(pos,
-                  "C struct/union member cannot be declared %s" % visibility)
         return entry
 
     def declare_cfunction(self, name, type, pos,

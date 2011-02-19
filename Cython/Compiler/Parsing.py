@@ -1690,7 +1690,6 @@ def p_IF_statement(s, ctx):
     return result
 
 def p_statement(s, ctx, first_statement = 0):
-    cdef_flag = ctx.cdef_flag
     decorators = None
     if s.sy == 'ctypedef':
         if ctx.level not in ('module', 'module_pxd'):
@@ -1709,23 +1708,15 @@ def p_statement(s, ctx, first_statement = 0):
         decorators = p_decorators(s)
         if s.sy not in ('def', 'cdef', 'cpdef', 'class'):
             s.error("Decorators can only be followed by functions or classes")
-    elif s.sy == 'pass' and cdef_flag:
+    elif s.sy == 'pass' and ctx.cdef_flag:
         # empty cdef block
         return p_pass_statement(s, with_newline = 1)
-
-    overridable = 0
-    if s.sy == 'cdef':
-        cdef_flag = 1
-        s.next()
-    elif s.sy == 'cpdef':
-        cdef_flag = 1
-        overridable = 1
-        s.next()
-    if cdef_flag:
+    ctx = p_c_python_binding(s, ctx)
+    if ctx.cdef_flag:
         if ctx.level not in ('module', 'module_pxd', 'function', 'c_class', 'c_class_pxd'):
             s.error('cdef statement not allowed here')
         s.level = ctx.level
-        node = p_cdef_statement(s, ctx(overridable = overridable))
+        node = p_cdef_statement(s, ctx)
         if decorators is not None:
             if not isinstance(node, (Nodes.CFuncDefNode, Nodes.CVarDefNode, Nodes.CClassDefNode)):
                 s.error("Decorators can only be followed by functions or classes")
@@ -2329,7 +2320,6 @@ def p_api(s):
 
 def p_cdef_statement(s, ctx):
     pos = s.position()
-    ctx.visibility = p_visibility(s, ctx.visibility)
     ctx.api = ctx.api or p_api(s)
     if ctx.api:
         if ctx.visibility not in ('private', 'public'):
@@ -2436,6 +2426,7 @@ def p_c_enum_line(s, ctx, items):
 
 def p_c_enum_item(s, ctx, items):
     pos = s.position()
+    ctx = p_c_python_binding(s, ctx)
     name = p_ident(s)
     cname = p_opt_cname(s)
     if cname is None and ctx.namespace is not None:
@@ -2445,7 +2436,9 @@ def p_c_enum_item(s, ctx, items):
         s.next()
         value = p_test(s)
     items.append(Nodes.CEnumDefItemNode(pos,
-        name = name, cname = cname, value = value))
+        name = name, cname = cname, value = value,
+        visibility = ctx.visibility,
+        in_pxd = ctx.level == 'module_pxd'))
 
 def p_c_struct_or_union_definition(s, pos, ctx):
     packed = False
@@ -2467,14 +2460,14 @@ def p_c_struct_or_union_definition(s, pos, ctx):
         s.expect('NEWLINE')
         s.expect_indent()
         attributes = []
-        body_ctx = Ctx()
         while s.sy != 'DEDENT':
-            if s.sy != 'pass':
-                attributes.append(
-                    p_c_func_or_var_declaration(s, s.position(), body_ctx))
-            else:
+            if s.sy == 'pass':
                 s.next()
                 s.expect_newline("Expected a newline")
+            else:
+                body_ctx = p_c_python_binding(s, Ctx())
+                attributes.append(
+                    p_c_func_or_var_declaration(s, s.position(), body_ctx))
         s.expect_dedent()
     else:
         s.expect_newline("Syntax error in struct or union definition")
@@ -2500,6 +2493,25 @@ def p_c_modifiers(s):
         s.next()
         return [modifier] + p_c_modifiers(s)
     return []
+
+def p_c_python_binding(s, ctx):
+    cdef_flag = ctx.cdef_flag
+    overridable = ctx
+    cdef_flag = ctx.cdef_flag
+    overridable = 0
+    if s.sy == 'cdef':
+        cdef_flag = 1
+        s.next()
+    elif s.sy == 'cpdef':
+        cdef_flag = 1
+        overridable = 1
+        s.next()
+    if cdef_flag:
+        visibility = p_visibility(s, ctx.visibility)
+    else:
+        visibility = ctx.visibility
+    return ctx(
+        cdef_flag=cdef_flag, overridable=overridable, visibility=visibility)
 
 def p_c_func_or_var_declaration(s, pos, ctx):
     cmethod_flag = ctx.level in ('c_class', 'c_class_pxd')
@@ -2856,7 +2868,7 @@ def p_cpp_class_definition(s, pos,  ctx):
         s.expect('NEWLINE')
         s.expect_indent()
         attributes = []
-        body_ctx = Ctx(visibility = ctx.visibility)
+        body_ctx = Ctx(visibility = p_visibility(s, ctx.visibility))
         body_ctx.templates = templates
         while s.sy != 'DEDENT':
             if s.systring == 'cppclass':
