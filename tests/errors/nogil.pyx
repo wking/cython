@@ -90,11 +90,11 @@ def bare_pyvar_name(object x):
 # except these: 29, 34, 44, 56, 58, 60, 62-64
 
 _ERRORS = u"""
-1:5: Function with Python return type cannot be declared nogil
-4:5: Function declared nogil has Python locals or temporaries
+1:0: Function with Python return type cannot be declared nogil
+4:0: Function declared nogil has Python locals or temporaries
 6:6: Assignment of Python object not allowed without gil
 9:5: Discarding owned Python object not allowed without gil
-11:5: Function with Python return type cannot be declared nogil
+11:0: Function with Python return type cannot be declared nogil
 15:5: Calling gil-requiring function not allowed without gil
 24:9: Calling gil-requiring function not allowed without gil
 26:12: Assignment of Python object not allowed without gil

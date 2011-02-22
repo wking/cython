@@ -4,5 +4,5 @@ cdef class A:
         pass
 
 _ERRORS = u"""
-3:10: Self argument (int) of C method 'a' does not match parent type (A)
+3:4: Self argument (int) of C method 'a' does not match parent type (A)
 """

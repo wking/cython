@@ -1906,14 +1906,21 @@ def p_statement(s, ctx, first_statement = 0):
         if ctx.level not in ('module', 'module_pxd', 'function', 'c_class', 'c_class_pxd'):
             s.error('cdef statement not allowed here')
         s.level = ctx.level
-        node = p_cdef_statement(s, ctx)
-        if decorators is not None:
-            if not isinstance(node, (Nodes.CFuncDefNode, Nodes.CVarDefNode, Nodes.CClassDefNode)):
-                s.error("Decorators can only be followed by functions or classes")
-            node.decorators = decorators
-        return node
-    elif ctx.c_binding.api:
-        s.error("'api' not allowed with this statement")
+    if ctx.c_binding.api:
+        if ctx.c_source.cdef_flag:
+            if ctx.c_source.extern:
+                error(pos, "Cannot combine 'api' with 'extern'")
+        else:
+            s.error("'api' not allowed with this statement")
+    if ctx.c_source.cdef_flag and p_nogil(s):
+        ctx.nogil = 1
+        if ctx.python_binding.overridable:
+            error(pos, "cdef blocks cannot be declared cpdef")
+        return p_cdef_block(s, ctx)
+    elif s.sy == ':' and ctx.c_source.cdef_flag:
+        if ctx.python_binding.overridable:
+            error(pos, "cdef blocks cannot be declared cpdef")
+        return p_cdef_block(s, ctx)
     elif s.sy == 'def':
         # def statements aren't allowed in pxd files, except
         # as part of a cdef class
@@ -1922,15 +1929,42 @@ def p_statement(s, ctx, first_statement = 0):
         s.level = ctx.level
         return p_def_statement(s, decorators)
     elif s.sy == 'class':
-        if ctx.level not in ('module', 'function', 'class', 'other'):
-            s.error("class definition not allowed here")
+        if ctx.c_source.cdef_flag:
+            if ctx.level not in ('module', 'module_pxd'):
+                error(pos, "Extension type definition not allowed here")
+            if ctx.python_binding.overridable:
+                error(pos, "Extension types cannot be declared cpdef")
+            return p_c_class_definition(s, pos, ctx, decorators)
+        else:
+            if ctx.level not in ('module', 'function', 'class', 'other'):
+                s.error("class definition not allowed here")
         return p_class_statement(s, decorators)
+    elif s.sy == 'from' and ctx.c_source.extern:
+        return p_cdef_extern_block(s, pos, ctx)
+    elif s.sy == 'import' and ctx.c_source.cdef_flag:
+        s.next()
+        return p_cdef_extern_block(s, pos, ctx)
     elif s.sy == 'include':
         if ctx.level not in ('module', 'module_pxd'):
             s.error("include statement not allowed here")
         return p_include_statement(s, ctx)
     elif ctx.level == 'c_class' and s.sy == 'IDENT' and s.systring == 'property':
         return p_property_decl(s)
+    elif ctx.c_source.cdef_flag:
+        if s.sy == 'IDENT' and s.systring == 'cppclass':
+            if not ctx.c_source.extern:
+                error(pos, "C++ classes need to be declared extern")
+            return p_cpp_class_definition(s, pos, ctx)
+        elif s.sy == 'IDENT' and s.systring in ("struct", "union", "enum", "packed"):
+            if ctx.level not in ('module', 'module_pxd'):
+                error(pos, "C struct/union/enum definition not allowed here")
+            if ctx.python_binding.overridable:
+                error(pos, "C struct/union/enum cannot be declared cpdef")
+            if s.systring == "enum":
+                return p_c_enum_definition(s, pos, ctx)
+            else:
+                return p_c_struct_or_union_definition(s, pos, ctx)
+        return p_c_func_or_var_declaration(s, pos, ctx, decorators)
     elif s.sy == 'pass' and ctx.level != 'property':
         return p_pass_statement(s, with_newline = 1)
     elif ctx.level in ('c_class_pxd', 'property'):
@@ -2553,47 +2587,6 @@ def p_api(s):
     else:
         return 0
 
-def p_cdef_statement(s, ctx):
-    pos = s.position()
-    if ctx.c_binding.api:
-        if ctx.c_source.extern:
-            error(pos, "Cannot combine 'api' with 'extern'")
-    if ctx.c_source.extern and s.sy == 'from':
-        return p_cdef_extern_block(s, pos, ctx)
-    elif s.sy == 'import':
-        s.next()
-        return p_cdef_extern_block(s, pos, ctx)
-    elif p_nogil(s):
-        ctx.nogil = 1
-        if ctx.python_binding.overridable:
-            error(pos, "cdef blocks cannot be declared cpdef")
-        return p_cdef_block(s, ctx)
-    elif s.sy == ':':
-        if ctx.python_binding.overridable:
-            error(pos, "cdef blocks cannot be declared cpdef")
-        return p_cdef_block(s, ctx)
-    elif s.sy == 'class':
-        if ctx.level not in ('module', 'module_pxd'):
-            error(pos, "Extension type definition not allowed here")
-        if ctx.python_binding.overridable:
-            error(pos, "Extension types cannot be declared cpdef")
-        return p_c_class_definition(s, pos, ctx)
-    elif s.sy == 'IDENT' and s.systring == 'cppclass':
-        if not ctx.c_source.extern:
-            error(pos, "C++ classes need to be declared extern")
-        return p_cpp_class_definition(s, pos, ctx)
-    elif s.sy == 'IDENT' and s.systring in ("struct", "union", "enum", "packed"):
-        if ctx.level not in ('module', 'module_pxd'):
-            error(pos, "C struct/union/enum definition not allowed here")
-        if ctx.python_binding.overridable:
-            error(pos, "C struct/union/enum cannot be declared cpdef")
-        if s.systring == "enum":
-            return p_c_enum_definition(s, pos, ctx)
-        else:
-            return p_c_struct_or_union_definition(s, pos, ctx)
-    else:
-        return p_c_func_or_var_declaration(s, pos, ctx)
-
 def p_cdef_block(s, ctx):
     return p_suite(s, ctx(cdef_flag = 1))
 
@@ -2801,7 +2794,7 @@ def p_binding(s, ctx):
     _LOG.info('  python binding overridable: %s' % new_ctx.python_binding.overridable)
     return new_ctx
 
-def p_c_func_or_var_declaration(s, pos, ctx):
+def p_c_func_or_var_declaration(s, pos, ctx, decorators=None):
     _LOG.debug('p_c_func_or_var_declaration(s=<s sy:%s systring:%s>)'
                % (s.sy, s.systring))
     cmethod_flag = ctx.level in ('c_class', 'c_class_pxd')
@@ -2825,6 +2818,7 @@ def p_c_func_or_var_declaration(s, pos, ctx):
             visibility = visibility,
             base_type = base_type,
             declarator = declarator,
+            decorators = decorators,
             body = suite,
             doc = doc,
             modifiers = modifiers,
@@ -2852,6 +2846,7 @@ def p_c_func_or_var_declaration(s, pos, ctx):
             overridable = ctx.python_binding.overridable,
             base_type = base_type,
             declarators = declarators,
+            decorators = decorators,
             in_pxd = ctx.level == 'module_pxd')
     return result
 
@@ -2983,7 +2978,7 @@ def p_class_statement(s, decorators):
         starstar_arg = starstar_arg,
         doc = doc, body = body, decorators = decorators)
 
-def p_c_class_definition(s, pos,  ctx):
+def p_c_class_definition(s, pos,  ctx, decorators=None):
     # s.sy == 'class'
     s.next()
     module_path = []
@@ -3059,6 +3054,7 @@ def p_c_class_definition(s, pos,  ctx):
         base_class_name = base_class_name,
         objstruct_name = objstruct_name,
         typeobj_name = typeobj_name,
+        decorators = decorators,
         in_pxd = ctx.level == 'module_pxd',
         doc = doc,
         body = body)
