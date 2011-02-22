@@ -1902,7 +1902,7 @@ def p_statement(s, ctx, first_statement = 0):
         if ctx.level not in ('module', 'module_pxd'):
             s.error("ctypedef statement not allowed here")
         return p_ctypedef_statement(s, pos, ctx)
-    if ctx.c_source.cdef_flag:
+    elif ctx.c_source.cdef_flag:
         if ctx.level not in ('module', 'module_pxd', 'function', 'c_class', 'c_class_pxd'):
             s.error('cdef statement not allowed here')
         s.level = ctx.level
@@ -1912,44 +1912,41 @@ def p_statement(s, ctx, first_statement = 0):
                 s.error("Decorators can only be followed by functions or classes")
             node.decorators = decorators
         return node
-    else:
-        if ctx.c_binding.api:
-            s.error("'api' not allowed with this statement")
-        elif s.sy == 'def':
-            # def statements aren't allowed in pxd files, except
-            # as part of a cdef class
-            if ('pxd' in ctx.level) and (ctx.level != 'c_class_pxd'):
-                s.error('def statement not allowed here')
-            s.level = ctx.level
-            return p_def_statement(s, decorators)
-        elif s.sy == 'class':
-            if ctx.level not in ('module', 'function', 'class', 'other'):
-                s.error("class definition not allowed here")
-            return p_class_statement(s, decorators)
-        elif s.sy == 'include':
-            if ctx.level not in ('module', 'module_pxd'):
-                s.error("include statement not allowed here")
-            return p_include_statement(s, ctx)
-        elif ctx.level == 'c_class' and s.sy == 'IDENT' and s.systring == 'property':
-            return p_property_decl(s)
-        elif s.sy == 'pass' and ctx.level != 'property':
-            return p_pass_statement(s, with_newline = 1)
-        else:
-            if ctx.level in ('c_class_pxd', 'property'):
-                s.error("Executable statement not allowed here")
-            if s.sy == 'if':
-                return p_if_statement(s)
-            elif s.sy == 'while':
-                return p_while_statement(s)
-            elif s.sy == 'for':
-                return p_for_statement(s)
-            elif s.sy == 'try':
-                return p_try_statement(s)
-            elif s.sy == 'with':
-                return p_with_statement(s)
-            else:
-                return p_simple_statement_list(
-                    s, ctx, first_statement = first_statement)
+    elif ctx.c_binding.api:
+        s.error("'api' not allowed with this statement")
+    elif s.sy == 'def':
+        # def statements aren't allowed in pxd files, except
+        # as part of a cdef class
+        if ('pxd' in ctx.level) and (ctx.level != 'c_class_pxd'):
+            s.error('def statement not allowed here')
+        s.level = ctx.level
+        return p_def_statement(s, decorators)
+    elif s.sy == 'class':
+        if ctx.level not in ('module', 'function', 'class', 'other'):
+            s.error("class definition not allowed here")
+        return p_class_statement(s, decorators)
+    elif s.sy == 'include':
+        if ctx.level not in ('module', 'module_pxd'):
+            s.error("include statement not allowed here")
+        return p_include_statement(s, ctx)
+    elif ctx.level == 'c_class' and s.sy == 'IDENT' and s.systring == 'property':
+        return p_property_decl(s)
+    elif s.sy == 'pass' and ctx.level != 'property':
+        return p_pass_statement(s, with_newline = 1)
+    elif ctx.level in ('c_class_pxd', 'property'):
+        s.error("Executable statement not allowed here")
+    elif s.sy == 'if':
+        return p_if_statement(s)
+    elif s.sy == 'while':
+        return p_while_statement(s)
+    elif s.sy == 'for':
+        return p_for_statement(s)
+    elif s.sy == 'try':
+        return p_try_statement(s)
+    elif s.sy == 'with':
+        return p_with_statement(s)
+    return p_simple_statement_list(
+        s, ctx, first_statement = first_statement)
 
 def p_statement_list(s, ctx, first_statement = 0):
     # Parse a series of statements separated by newlines.
