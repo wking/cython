@@ -1881,13 +1881,8 @@ def p_statement(s, ctx, first_statement = 0):
     _LOG.debug('p_statement(s=<s sy:%s systring:%s>)'
                % (s.sy, s.systring))
     decorators = None
-    if s.sy == 'ctypedef':
-        if ctx.level not in ('module', 'module_pxd'):
-            s.error("ctypedef statement not allowed here")
-        #if ctx.c_binding.api:
-        #    error(s.position(), "'api' not allowed with 'ctypedef'")
-        return p_ctypedef_statement(s, ctx)
-    elif s.sy == 'DEF':
+    pos = s.position()
+    if s.sy == 'DEF':
         return p_DEF_statement(s)
     elif s.sy == 'IF':
         return p_IF_statement(s, ctx)
@@ -1901,7 +1896,12 @@ def p_statement(s, ctx, first_statement = 0):
     elif s.sy == 'pass' and ctx.c_source.cdef:
         # empty cdef block
         return p_pass_statement(s, with_newline = 1)
+    sy = s.sy
     ctx = p_binding(s, ctx)
+    if sy == 'ctypedef':
+        if ctx.level not in ('module', 'module_pxd'):
+            s.error("ctypedef statement not allowed here")
+        return p_ctypedef_statement(s, pos, ctx)
     if ctx.c_source.cdef:
         if ctx.level not in ('module', 'module_pxd', 'function', 'c_class', 'c_class_pxd'):
             s.error('cdef statement not allowed here')
@@ -2858,12 +2858,9 @@ def p_c_func_or_var_declaration(s, pos, ctx):
             in_pxd = ctx.level == 'module_pxd')
     return result
 
-def p_ctypedef_statement(s, ctx):
-    # s.sy == 'ctypedef'
+def p_ctypedef_statement(s, pos, ctx):
     _LOG.debug('p_ctypedef_statement(s=<s sy:%s systring:%s>)'
                % (s.sy, s.systring))
-    pos = s.position()
-    ctx = p_binding(s, ctx)
     if s.sy == 'class':
         return p_c_class_definition(s, pos, ctx)
     elif s.sy == 'IDENT' and s.systring in ('packed', 'struct', 'union', 'enum'):
