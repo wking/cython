@@ -1901,7 +1901,7 @@ def p_statement(s, ctx, first_statement = 0):
     elif s.sy == 'pass' and ctx.c_source.cdef:
         # empty cdef block
         return p_pass_statement(s, with_newline = 1)
-    ctx = p_c_python_binding(s, ctx)
+    ctx = p_binding(s, ctx)
     if ctx.c_source.cdef:
         if ctx.level not in ('module', 'module_pxd', 'function', 'c_class', 'c_class_pxd'):
             s.error('cdef statement not allowed here')
@@ -2558,7 +2558,6 @@ def p_api(s):
 
 def p_cdef_statement(s, ctx):
     pos = s.position()
-    ctx.c_binding.api = ctx.c_binding.api or p_api(s)
     if ctx.c_binding.api:
         if ctx.c_source.extern:
             error(pos, "Cannot combine 'api' with 'extern'")
@@ -2679,7 +2678,7 @@ def p_c_enum_item(s, ctx, items):
     _LOG.debug('p_c_enum_item(s=<s sy:%s systring:%s>)'
                % (s.sy, s.systring))
     pos = s.position()
-    ctx = p_c_python_binding(s, ctx)
+    ctx = p_binding(s, ctx)
     name = p_ident(s)
     cname = p_opt_cname(s)
     if cname is None and ctx.c_source.namespace is not None:
@@ -2726,7 +2725,7 @@ def p_c_struct_or_union_definition(s, pos, ctx):
                 s.next()
                 s.expect_newline("Expected a newline")
             else:
-                body_ctx = p_c_python_binding(s, Ctx())
+                body_ctx = p_binding(s, Ctx())
                 attributes.append(
                     p_c_func_or_var_declaration(s, s.position(), body_ctx))
         s.expect_dedent()
@@ -2780,8 +2779,8 @@ def p_c_modifiers(s):
         return [modifier] + p_c_modifiers(s)
     return []
 
-def p_c_python_binding(s, ctx):
-    _LOG.debug('p_c_python_binding(s=<s sy:%s systring:%s>)'
+def p_binding(s, ctx):
+    _LOG.debug('p_binding(s=<s sy:%s systring:%s>)'
                % (s.sy, s.systring))
     new_ctx = ctx()
     new_ctx.python_binding.overridable = 0
@@ -2792,8 +2791,16 @@ def p_c_python_binding(s, ctx):
         new_ctx.c_source.cdef = 1
         new_ctx.python_binding.overridable = 1
         s.next()
+    elif s.sy == 'ctypedef':
+        new_ctx.typedef_flag = 1
+        new_ctx.c_source.cdef = 1
+        s.next()
     if new_ctx.c_source.cdef:
         new_ctx = p_visibility(s, new_ctx)
+        new_ctx.c_binding.api = ctx.c_binding.api or p_api(s)
+    _LOG.info('  binding cdef: %s' % new_ctx.c_source.cdef)
+    _LOG.info('  binding ctypedef: %s' % new_ctx.typedef_flag)
+    _LOG.info('  c binding api: %s' % new_ctx.c_binding.api)
     _LOG.info('  python binding overridable: %s' % new_ctx.python_binding.overridable)
     return new_ctx
 
@@ -2856,12 +2863,7 @@ def p_ctypedef_statement(s, ctx):
     _LOG.debug('p_ctypedef_statement(s=<s sy:%s systring:%s>)'
                % (s.sy, s.systring))
     pos = s.position()
-    s.next()
-    ctx = p_visibility(s, ctx)
-    api = p_api(s)
-    ctx = ctx(typedef_flag = 1)
-    if api:
-        ctx.c_binding.api = 1
+    ctx = p_binding(s, ctx)
     if s.sy == 'class':
         return p_c_class_definition(s, pos, ctx)
     elif s.sy == 'IDENT' and s.systring in ('packed', 'struct', 'union', 'enum'):
