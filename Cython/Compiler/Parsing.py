@@ -50,13 +50,13 @@ class CSource(CtxAttribute):
     * name (string): Source symbol name (if the symbol is external)
     * namespace (string): C++ namespace (`None` for C objects, set if
       the symbol is external)
-    * cdef (boolean): Symbol (data) has a C definition.
+    * cdef_flag (boolean): Symbol (data) has a C definition.
     * extern (boolean): Symbol is defined elsewhere (otherwise a local
       defition is created).
     """
     name = None
     namespace = None
-    cdef = 0
+    cdef_flag = 0
     extern = 0
 
 
@@ -1893,7 +1893,7 @@ def p_statement(s, ctx, first_statement = 0):
         decorators = p_decorators(s)
         if s.sy not in ('def', 'cdef', 'cpdef', 'class'):
             s.error("Decorators can only be followed by functions or classes")
-    elif s.sy == 'pass' and ctx.c_source.cdef:
+    elif s.sy == 'pass' and ctx.c_source.cdef_flag:
         # empty cdef block
         return p_pass_statement(s, with_newline = 1)
     sy = s.sy
@@ -1902,7 +1902,7 @@ def p_statement(s, ctx, first_statement = 0):
         if ctx.level not in ('module', 'module_pxd'):
             s.error("ctypedef statement not allowed here")
         return p_ctypedef_statement(s, pos, ctx)
-    if ctx.c_source.cdef:
+    if ctx.c_source.cdef_flag:
         if ctx.level not in ('module', 'module_pxd', 'function', 'c_class', 'c_class_pxd'):
             s.error('cdef statement not allowed here')
         s.level = ctx.level
@@ -2612,7 +2612,7 @@ def p_cdef_extern_block(s, pos, ctx):
     else:
         include_file = p_string_literal(s, 'u')[2]
     ctx = ctx()
-    ctx.c_source.cdef = 1
+    ctx.c_source.cdef_flag = 1
     ctx.c_source.extern = 1
     if s.systring == "namespace":
         s.next()
@@ -2742,7 +2742,7 @@ def p_c_struct_or_union_definition(s, pos, ctx):
         kind = kind,
         attributes = attributes,
         typedef_flag = ctx.typedef_flag,
-        cdef_flag = ctx.c_source.cdef,
+        cdef_flag = ctx.c_source.cdef_flag,
         overridable = ctx.python_binding.overridable,
         visibility = visibility,
         in_pxd = ctx.level == 'module_pxd',
@@ -2785,20 +2785,20 @@ def p_binding(s, ctx):
     new_ctx = ctx()
     new_ctx.python_binding.overridable = 0
     if s.sy == 'cdef':
-        new_ctx.c_source.cdef = 1
+        new_ctx.c_source.cdef_flag = 1
         s.next()
     elif s.sy == 'cpdef':
-        new_ctx.c_source.cdef = 1
+        new_ctx.c_source.cdef_flag = 1
         new_ctx.python_binding.overridable = 1
         s.next()
     elif s.sy == 'ctypedef':
         new_ctx.typedef_flag = 1
-        new_ctx.c_source.cdef = 1
+        new_ctx.c_source.cdef_flag = 1
         s.next()
-    if new_ctx.c_source.cdef:
+    if new_ctx.c_source.cdef_flag:
         new_ctx = p_visibility(s, new_ctx)
         new_ctx.c_binding.api = ctx.c_binding.api or p_api(s)
-    _LOG.info('  binding cdef: %s' % new_ctx.c_source.cdef)
+    _LOG.info('  binding cdef: %s' % new_ctx.c_source.cdef_flag)
     _LOG.info('  binding ctypedef: %s' % new_ctx.typedef_flag)
     _LOG.info('  c binding api: %s' % new_ctx.c_binding.api)
     _LOG.info('  python binding overridable: %s' % new_ctx.python_binding.overridable)
@@ -2823,7 +2823,7 @@ def p_c_func_or_var_declaration(s, pos, ctx):
         elif ctx.c_binding.visibility != 'private':
             visibility = ctx.c_binding.visibility
         result = Nodes.CFuncDefNode(pos,
-            cdef_flag = ctx.c_source.cdef,
+            cdef_flag = ctx.c_source.cdef_flag,
             overridable = ctx.python_binding.overridable,
             visibility = visibility,
             base_type = base_type,
