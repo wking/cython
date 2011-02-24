@@ -1127,7 +1127,7 @@ property NAME:
     def visit_CNameDeclaratorNode(self, node):
         if node.name in self.seen_vars_stack[-1]:
             entry = self.env_stack[-1].lookup(node.name)
-            if entry is None or entry.visibility != 'extern':
+            if entry is None or not entry.c_source.extern:
                 warning(node.pos, "cdef variable '%s' declared after it is used" % node.name, 2)
         self.visitchildren(node)
         return node
@@ -1138,13 +1138,15 @@ property NAME:
         return None
 
     def create_Property(self, entry):
-        if entry.visibility == 'public':
+        if entry.python_binding.visibility == 'public':
             if entry.type.is_pyobject:
                 template = self.basic_pyobject_property
             else:
                 template = self.basic_property
-        elif entry.visibility == 'readonly':
+        elif entry.python_binding.visibility == 'readonly':
             template = self.basic_property_ro
+        else:
+            raise NotImplementedError('private python methods')
         property = template.substitute({
                 u"ATTR": ExprNodes.AttributeNode(
                     pos=entry.pos,
@@ -1651,7 +1653,7 @@ class DebugTransform(CythonTransform):
             self.nested_funcdefs.append(node)
             return node
 
-        # node.entry.visibility = 'extern'
+        # node.entry.c_source.extern
         if node.py_func is None:
             pf_cname = ''
         else:

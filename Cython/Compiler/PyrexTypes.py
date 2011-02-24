@@ -2019,7 +2019,7 @@ class CStructOrUnionType(CType):
                     self.to_py_function = None
                     self._convert_code = False
                     return False
-            forward_decl = (self.entry.visibility != 'extern')
+            forward_decl = not self.entry.c_source.extern
             self._convert_code = StructUtilityCode(self, forward_decl)
         
         env.use_utility_code(self._convert_code)

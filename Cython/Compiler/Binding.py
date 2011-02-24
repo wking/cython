@@ -68,5 +68,5 @@ class PythonBinding(CtxAttribute):
       class methods.
     """
     name = None
-    visibility = 'private'
+    visibility = 'public' #private'
     overridable = 0

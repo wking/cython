@@ -287,7 +287,7 @@ class GCDependentSlot(InternalMethodSlot):
             parent_type_scope = scope.parent_type.base_type.scope
             if scope.parent_scope is parent_type_scope.parent_scope:
                 entry = scope.parent_scope.lookup_here(scope.parent_type.base_type.name)
-                if entry.visibility != 'extern':
+                if not entry.c_source.extern:
                     return self.slot_code(parent_type_scope)
         return InternalMethodSlot.slot_code(self, scope)
 
@@ -309,7 +309,7 @@ class ConstructorSlot(InternalMethodSlot):
             parent_type_scope = scope.parent_type.base_type.scope
             if scope.parent_scope is parent_type_scope.parent_scope:
                 entry = scope.parent_scope.lookup_here(scope.parent_type.base_type.name)
-                if entry.visibility != 'extern':
+                if not entry.c_source.extern:
                     return self.slot_code(parent_type_scope)
         return InternalMethodSlot.slot_code(self, scope)
 
@@ -468,7 +468,7 @@ def get_base_slot_function(scope, slot):
         parent_slot = slot.slot_code(base_type.scope)
         if parent_slot != '0':
             entry = scope.parent_scope.lookup_here(scope.parent_type.base_type.name)
-            if entry.visibility != 'extern':
+            if not entry.c_source.extern:
                 return parent_slot
     return None
 

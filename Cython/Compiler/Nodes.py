@@ -1119,9 +1119,14 @@ class CEnumDefItemNode(StatNode):
             if not self.value.type.is_int:
                 self.value = self.value.coerce_to(PyrexTypes.c_int_type, env)
                 self.value.analyse_const_expression(env)
+        visibility = 'private'
+        if enum_entry.c_source.extern:
+            visibility = 'extern'
+        elif enum_entry.c_binding.visibility != 'private':
+            visibility = enum_entry.c_binding.visibility
         entry = env.declare_const(self.name, enum_entry.type,
             self.value, self.pos, cname = self.cname,
-            visibility = enum_entry.visibility)
+            visibility = visibility)
         enum_entry.enum_values.append(entry)
 
 
@@ -1742,7 +1747,6 @@ class CFuncDefNode(FuncDefNode):
     def generate_function_header(self, code, with_pymethdef, with_opt_args = 1, with_dispatch = 1, cname = None):
         arg_decls = []
         type = self.type
-        visibility = self.entry.visibility
         for arg in type.args[:len(type.args)-type.optional_arg_count]:
             arg_decls.append(arg.declaration_code())
         if with_dispatch and self.overridable:
@@ -1756,15 +1760,16 @@ class CFuncDefNode(FuncDefNode):
         if cname is None:
             cname = self.entry.func_cname
         entity = type.function_header_code(cname, ', '.join(arg_decls))
-        if visibility == 'public':
+        if (self.entry.c_binding.visibility == 'public' and
+            not self.entry.c_source.extern):
             dll_linkage = "DL_EXPORT"
         else:
             dll_linkage = None
         header = self.return_type.declaration_code(entity,
             dll_linkage = dll_linkage)
-        if visibility == 'extern':
+        if self.entry.c_source.extern:
             storage_class = "%s " % Naming.extern_c_macro
-        elif visibility == 'public':
+        elif self.entry.c_binding.visibility == 'public':
             storage_class = ""
         else:
             storage_class = "static "

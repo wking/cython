@@ -65,7 +65,6 @@ class Entry(object):
     # type             PyrexType  Type of entity
     # doc              string     Doc string
     # init             string     Initial value
-    # visibility       'private' or 'public' or 'extern'
     # is_builtin       boolean    Is an entry in the Python builtins dict
     # is_cglobal       boolean    Is a C global variable
     # is_pyglobal      boolean    Is a Python module-level variable
@@ -132,7 +131,6 @@ class Entry(object):
     inline_func_in_pxd = False
     borrowed = 0
     init = ""
-    visibility = 'private'
     is_builtin = 0
     is_cglobal = 0
     is_pyglobal = 0
@@ -357,6 +355,15 @@ class Scope(object):
                 error(pos, "'%s' redeclared " % name)
         entry = Entry(name, cname, type, pos = pos)
         entry.in_cinclude = self.in_cinclude
+        if visibility == 'extern':
+            entry.c_source.extern = 1
+            entry.c_binding.visibility = 'public'
+        elif self.outer_scope and visibility not in ('readonly',):
+            entry.c_binding.visibility = visibility
+        else:
+            entry.python_binding.visibility = visibility
+            if entry.python_binding.visibility != 'private':
+                entry.c_binding.visibility = 'public'
         if name:
             entry.qualified_name = self.qualify_name(name)
 #            if name in entries and self.is_cpp():
@@ -365,7 +372,6 @@ class Scope(object):
 #                entries[name] = entry
             entries[name] = entry
         entry.scope = self
-        entry.visibility = visibility
         return entry
 
     def qualify_name(self, name):
@@ -488,10 +494,29 @@ class Scope(object):
                 entry.python_binding.name,
                 ("cdef", "ctypedef")[entry.type.typedef_flag]))
 
-    def check_previous_visibility(self, entry, visibility, pos):
-        if entry.visibility != visibility:
-            error(pos, "'%s' previously declared as '%s'" % (
-                entry.python_binding.name, entry.visibility))
+    def _check_previous_visibility(self, entry, visibility):
+        # Compare the visibility of `entry` with a second
+        # `visibility`.  If there is a difference, return a string
+        # representing the conflicting `entry` visibility, otherwise
+        # return an empty string.
+        if visibility == 'extern':
+            if not entry.c_source.extern:
+                return 'extern'
+        elif self.outer_scope:
+            if visibility != entry.c_binding.visibility:
+                return entry.c_binding.visibility
+        elif visibility != entry.python_binding.visibility:
+            if visibilty != entry.c_binding.visibility:
+                return entry.python_binding.visibility
+
+    def check_previous_visibility(self, entry, visibility, pos,
+                                  type_name=None):
+        vis_diff = self._check_previous_visibility(entry, visibility)
+        if vis_diff:
+            if not type_name:
+                type_name = type(entry)
+            error(pos, "%s '%s' previously declared as '%s'" % (
+                    type_name, entry.python_binding.name, vis_diff))
 
     def declare_enum(self, name, pos, cname, typedef_flag,
             visibility = 'private'):
@@ -586,10 +611,14 @@ class Scope(object):
                 cname = self.mangle(Naming.func_prefix, name)
         entry = self.lookup_here(name)
         if entry:
-            if visibility != 'private' and visibility != entry.visibility:
-                warning(pos, "Function '%s' previously declared as '%s'" % (name, entry.visibility), 1)
+            if visibility != 'private':
+                vis_diff = self._check_previous_visibility(entry, visibility)
+                if vis_diff:
+                    warning(
+                        pos, "Function '%s' previously declared as '%s'" % (
+                            name, vis_diff), 1)
             if not entry.type.same_as(type):
-                if visibility == 'extern' and entry.visibility == 'extern':
+                if visibility == 'extern' and entry.c_source.extern:
                     can_override = False
                     if self.is_cpp():
                         can_override = True
@@ -1120,9 +1149,9 @@ class ModuleScope(Scope):
             entry.defined_in_pxd = 1
         if implementing:   # So that filenames in runtime exceptions refer to
             entry.pos = pos  # the .pyx file and not the .pxd file
-        if visibility != 'private' and entry.visibility != visibility:
-            error(pos, "Class '%s' previously declared as '%s'"
-                % (name, entry.visibility))
+        if visibility != 'private':
+            self.check_previous_visibility(
+                entry, visibility, pos, type_name='Class')
         if api:
             entry.c_binding.api = 1
         if objstruct_cname:
@@ -1193,12 +1222,11 @@ class ModuleScope(Scope):
     def check_c_class(self, entry):
         type = entry.type
         name = entry.python_binding.name
-        visibility = entry.visibility
         # Check defined
         if not type.scope:
             error(entry.pos, "C class '%s' is declared but not defined" % name)
         # Generate typeobj_cname
-        if visibility != 'extern' and not type.typeobj_cname:
+        if not entry.c_source.extern and not type.typeobj_cname:
             type.typeobj_cname = self.mangle(Naming.typeobj_prefix, name)
         ## Generate typeptr_cname
         #type.typeptr_cname = self.mangle(Naming.typeptr_prefix, name)
@@ -1235,7 +1263,11 @@ class ModuleScope(Scope):
             if debug_check_c_classes:
                 print("...entry %s %s" % (entry.python_binding.name, entry))
                 print("......type = ",  entry.type)
-                print("......visibility = ", entry.visibility)
+                print("......extern = ", entry.c_source.extern)
+                print("......c_binding.visibility = ",
+                      entry.c_binding.visibility)
+                print("......python_binding.visibility = ",
+                      entry.python.binding.visibility)
             self.check_c_class(entry)
 
     def check_c_functions(self):
@@ -1245,7 +1277,7 @@ class ModuleScope(Scope):
             if entry.is_cfunction:
                 if (entry.defined_in_pxd
                         and entry.scope is self
-                        and entry.visibility != 'extern'
+                        and not entry.c_source.extern
                         and not entry.in_cinclude
                         and not entry.is_implemented):
                     error(entry.pos, "Non-extern C function '%s' declared but not defined" % name)
@@ -1693,10 +1725,15 @@ class CClassScope(ClassScope):
                 entry.is_variable = 1
                 self.inherited_var_entries.append(entry)
         for base_entry in base_scope.cfunc_entries:
+            visibility = 'private'
+            if base_entry.c_source.extern:
+                visibility = 'extern'
+            elif base_entry.c_binding.visibility != 'private':
+                visibility = base_entry.c_binding.visibility
             entry = self.add_cfunction(
                 base_entry.python_binding.name, base_entry.type,
                 base_entry.pos, adapt(base_entry.c_binding.name),
-                base_entry.visibility, base_entry.func_modifiers)
+                visibility, base_entry.func_modifiers)
             entry.is_inherited = 1
 
 
@@ -1786,10 +1823,15 @@ class CppClassScope(Scope):
                 entry.is_variable = 1
                 self.inherited_var_entries.append(entry)
         for base_entry in base_scope.cfunc_entries:
+            visibility = 'private'
+            if base_entry.c_source.extern:
+                visibility = 'extern'
+            elif base_entry.c_binding.visibility != 'private':
+                visibility = base_entry.c_binding.visibility
             entry = self.declare_cfunction(
                 base_entry.python_binding.name, base_entry.type,
                 base_entry.pos, base_entry.c_binding.name,
-                base_entry.visibility, base_entry.func_modifiers,
+                visibility, base_entry.func_modifiers,
                 utility_code = base_entry.utility_code)
             entry.is_inherited = 1
 
@@ -1801,10 +1843,20 @@ class CppClassScope(Scope):
                     entry.python_binding.name, entry.type.specialize(values),
                     entry.pos, entry.c_binding.name)
             else:
+#                visibility = 'private'
+#                if entry.c_source.extern:
+#                    visibility = 'extern'
+#                elif entry.c_binding.visibility != 'private':
+#                    visibility = entry.c_binding.visibility
 #                scope.declare_var(
 #                    entry.python_binding.name, entry.type.specialize(values),
-#                    entry.pos, entry.c_binding.name, entry.visibility)
+#                    entry.pos, entry.c_binding.name, visibility)
                 for e in entry.all_alternatives():
+#                    visibility = 'private'  # WTK: bug to not use visibility?
+#                    if e.c_source.extern:
+#                        visibility = 'extern'
+#                    elif e.c_binding.visibility != 'private':
+#                        visibility = base_entry.c_binding.visibility
                     scope.declare_cfunction(
                         e.python_binding.name, e.type.specialize(values),
                         e.pos, e.c_binding.name, utility_code = e.utility_code)

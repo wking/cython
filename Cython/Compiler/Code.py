@@ -1112,25 +1112,25 @@ class CCodeWriter(object):
         #print "Code.put_var_declaration:", entry.python_binding.name, "definition =", definition ###
         if entry.in_closure:
             return
-        visibility = entry.visibility
-        if visibility == 'private' and not definition:
+        if entry.c_binding.visibility == 'private' and not definition:
             #print "...private and not definition, skipping" ###
             return
-        if not entry.used and visibility == "private":
+        if entry.c_binding.visibility == 'private' and not entry.used:
             #print "not used and private, skipping", entry.c_binding.name ###
             return
         storage_class = ""
-        if visibility == 'extern':
+        if entry.c_source.extern:
             storage_class = Naming.extern_c_macro
-        elif visibility == 'public':
+        elif entry.c_binding.visibility == 'public':
             if not definition:
                 storage_class = Naming.extern_c_macro
-        elif visibility == 'private':
+        elif entry.c_binding.visibility == 'private':
             if static:
                 storage_class = "static"
         if storage_class:
             self.put("%s " % storage_class)
-        if visibility != 'public':
+        if (entry.c_source.extern or
+            entry.c_binding.visibility != 'public'):
             dll_linkage = None
         self.put(entry.type.declaration_code(entry.c_binding.name,
             dll_linkage = dll_linkage))
