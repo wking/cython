@@ -149,10 +149,10 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         h_code.putln("%s %s;" % (
             Naming.extern_c_macro,
             entry.type.declaration_code(
-                entry.cname, dll_linkage = "DL_IMPORT")))
+                entry.c_binding.name, dll_linkage = "DL_IMPORT")))
         if i_code:
             i_code.putln("cdef extern %s" %
-                entry.type.declaration_code(entry.cname, pyrex = 1))
+                entry.type.declaration_code(entry.c_binding.name, pyrex = 1))
 
     def api_name(self, env):
         return env.qualified_name.replace(".", "__")
@@ -162,12 +162,12 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         public_extension_types = []
         has_api_extension_types = 0
         for entry in env.cfunc_entries:
-            if entry.api:
+            if entry.c_binding.api:
                 api_funcs.append(entry)
         for entry in env.c_class_entries:
             if entry.visibility == 'public':
                 public_extension_types.append(entry)
-            if entry.api:
+            if entry.c_binding.api:
                 has_api_extension_types = 1
         if api_funcs or has_api_extension_types:
             result.api_file = replace_suffix(result.c_file, "_api.h")
@@ -189,7 +189,8 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 h_code.putln("")
                 for entry in api_funcs:
                     type = CPtrType(entry.type)
-                    h_code.putln("static %s;" % type.declaration_code(entry.cname))
+                    h_code.putln("static %s;" % type.declaration_code(
+                            entry.c_binding.name))
             h_code.putln("")
             h_code.put_h_guard(Naming.api_func_guard + "import_module")
             h_code.put(import_module_utility_code.impl)
@@ -210,8 +211,8 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 sig = entry.type.signature_string()
                 h_code.putln(
                     'if (__Pyx_ImportFunction(module, "%s", (void (**)(void))&%s, "%s") < 0) goto bad;' % (
-                        entry.name,
-                        entry.cname,
+                        entry.python_binding.name,
+                        entry.c_binding.name,
                         sig))
             h_code.putln("Py_DECREF(module); module = 0;")
             for entry in public_extension_types:
@@ -244,8 +245,8 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         var_entries = type.scope.var_entries
         if var_entries:
             for entry in var_entries:
-                i_code.putln("cdef %s" %
-                    entry.type.declaration_code(entry.cname, pyrex = 1))
+                i_code.putln("cdef %s" % entry.type.declaration_code(
+                        entry.c_binding.name, pyrex = 1))
         else:
             i_code.putln("pass")
         i_code.dedent()
@@ -412,7 +413,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                         type_entries.append(entry)
             for entry in type_entries:
                 if not entry.in_cinclude:
-                    #print "generate_type_header_code:", entry.name, repr(entry.type) ###
+                    #print "generate_type_header_code:", entry.python_binding.name, repr(entry.type) ###
                     type = entry.type
                     if type.is_typedef: # Must test this first!
                         self.generate_typedef(entry, code)
@@ -758,7 +759,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         #for entry in env.type_entries:
         for entry in type_entries:
             if not entry.in_cinclude:
-                #print "generate_type_header_code:", entry.name, repr(entry.type) ###
+                #print "generate_type_header_code:", entry.python_binding.name, repr(entry.type) ###
                 type = entry.type
                 if type.is_typedef: # Must test this first!
                     self.generate_typedef(entry, code)
@@ -790,7 +791,8 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         else:
             writer = code
         writer.putln("")
-        writer.putln("typedef %s;" % base_type.declaration_code(entry.cname))
+        writer.putln("typedef %s;" % base_type.declaration_code(
+                entry.c_binding.name))
 
     def sue_header_footer(self, type, kind, name):
         if type.typedef_flag:
@@ -829,7 +831,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             for attr in var_entries:
                 code.putln(
                     "%s;" %
-                        attr.type.declaration_code(attr.cname))
+                        attr.type.declaration_code(attr.c_binding.name))
             code.putln(footer)
             if packed:
                 code.putln("#if defined(__SUNPRO_C)")
@@ -841,7 +843,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
     def generate_enum_definition(self, entry, code):
         code.mark_pos(entry.pos)
         type = entry.type
-        name = entry.cname or entry.name or ""
+        name = entry.c_binding.name or entry.python_binding.name or ""
         header, footer = \
             self.sue_header_footer(type, "enum", name)
         code.putln("")
@@ -860,10 +862,10 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
 
             for value_entry in enum_values:
                 if value_entry.value_node is None:
-                    value_code = value_entry.cname
+                    value_code = value_entry.c_binding.name
                 else:
                     value_code = ("%s = %s" % (
-                        value_entry.cname,
+                        value_entry.c_binding.name,
                         value_entry.value_node.result()))
                 if value_entry is not last_entry:
                     value_code += ","
@@ -903,7 +905,8 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             for method_entry in scope.cfunc_entries:
                 if not method_entry.is_inherited:
                     code.putln(
-                        "%s;" % method_entry.type.declaration_code("(*%s)" % method_entry.name))
+                        "%s;" % method_entry.type.declaration_code(
+                            "(*%s)" % method_entry.python_binding.name))
             code.putln(
                 "};")
 
@@ -944,7 +947,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         for attr in type.scope.var_entries:
             code.putln(
                 "%s;" %
-                    attr.type.declaration_code(attr.cname))
+                    attr.type.declaration_code(attr.c_binding.name))
         code.putln(footer)
         if type.objtypedef_cname is not None:
             # Only for exposing public typedef name.
@@ -970,7 +973,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 type = entry.type
                 if not definition and entry.defined_in_pxd:
                     type = CPtrType(type)
-                header = type.declaration_code(entry.cname,
+                header = type.declaration_code(entry.c_binding.name,
                     dll_linkage = dll_linkage)
                 if entry.visibility == 'private':
                     storage_class = "static "
@@ -991,7 +994,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
     def generate_typeobj_definitions(self, env, code):
         full_module_name = env.qualified_name
         for entry in env.c_class_entries:
-            #print "generate_typeobj_definitions:", entry.name
+            #print "generate_typeobj_definitions:", entry.python_binding.name
             #print "...visibility =", entry.visibility
             if entry.visibility != 'extern':
                 type = entry.type
@@ -1089,9 +1092,9 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 type.vtabslot_cname,
                 struct_type_cast, type.vtabptr_cname))
         for entry in py_attrs:
-            if scope.is_internal or entry.name == "__weakref__":
+            if scope.is_internal or entry.python_binding.name == "__weakref__":
                 # internal classes do not need None inits
-                code.putln("p->%s = 0;" % entry.cname)
+                code.putln("p->%s = 0;" % entry.c_binding.name)
             else:
                 code.put_init_var_to_py_none(entry, "p->%s", nanny=False)
         entry = scope.lookup_here("__new__")
@@ -1132,7 +1135,8 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         if weakref_slot in scope.var_entries:
             code.putln("if (p->__weakref__) PyObject_ClearWeakRefs(o);")
         for entry in py_attrs:
-            code.put_xdecref("p->%s" % entry.cname, entry.type, nanny=False)
+            code.put_xdecref(
+                "p->%s" % entry.c_binding.name, entry.type, nanny=False)
         if base_type:
             tp_dealloc = TypeSlots.get_base_slot_function(scope, tp_slot)
             if tp_dealloc is None:
@@ -1180,7 +1184,8 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 % slot_func)
         py_attrs = []
         for entry in scope.var_entries:
-            if entry.type.is_pyobject and entry.name != "__weakref__":
+            if (entry.type.is_pyobject and
+                entry.python_binding.name != "__weakref__"):
                 py_attrs.append(entry)
         if base_type or py_attrs:
             code.putln("int e;")
@@ -1198,7 +1203,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                             base_type.typeptr_cname)
                 code.putln("}")
         for entry in py_attrs:
-            var_code = "p->%s" % entry.cname
+            var_code = "p->%s" % entry.c_binding.name
             code.putln(
                     "if (%s) {"
                         % var_code)
@@ -1224,7 +1229,8 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         code.putln("static int %s(PyObject *o) {" % slot_func)
         py_attrs = []
         for entry in scope.var_entries:
-            if entry.type.is_pyobject and entry.name != "__weakref__":
+            if (entry.type.is_pyobject and
+                entry.python_binding.name != "__weakref__"):
                 py_attrs.append(entry)
         if py_attrs:
             self.generate_self_cast(scope, code)
@@ -1239,7 +1245,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 code.putln("%s->tp_clear(o);" % base_type.typeptr_cname)
                 code.putln("}")
         for entry in py_attrs:
-            name = "p->%s" % entry.cname
+            name = "p->%s" % entry.c_binding.name
             code.putln("tmp = ((PyObject*)%s);" % name)
             code.put_init_to_py_none(name, entry.type, nanny=False)
             code.putln("Py_XDECREF(tmp);")
@@ -1551,7 +1557,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
     def generate_property_get_function(self, property_entry, code):
         property_scope = property_entry.scope
         property_entry.getter_cname = property_scope.parent_scope.mangle(
-            Naming.prop_get_prefix, property_entry.name)
+            Naming.prop_get_prefix, property_entry.python_binding.name)
         get_entry = property_scope.lookup_here("__get__")
         code.putln("")
         code.putln(
@@ -1566,7 +1572,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
     def generate_property_set_function(self, property_entry, code):
         property_scope = property_entry.scope
         property_entry.setter_cname = property_scope.parent_scope.mangle(
-            Naming.prop_set_prefix, property_entry.name)
+            Naming.prop_set_prefix, property_entry.python_binding.name)
         set_entry = property_scope.lookup_here("__set__")
         del_entry = property_scope.lookup_here("__del__")
         code.putln("")
@@ -1658,7 +1664,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                     doc_code = "0"
                 code.putln(
                     '{(char *)"%s", %s, %s, %s, 0},' % (
-                        entry.name,
+                        entry.python_binding.name,
                         entry.getter_cname or "0",
                         entry.setter_cname or "0",
                         doc_code))
@@ -1698,18 +1704,19 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                             entry.type.type_test_code("o"),
                             code.error_goto(entry.pos)))
                     code.putln("Py_INCREF(o);")
-                    code.put_decref(entry.cname, entry.type, nanny=False)
+                    code.put_decref(
+                        entry.c_binding.name, entry.type, nanny=False)
                     code.putln("%s = %s;" % (
-                        entry.cname,
+                        entry.c_binding.name,
                         PyrexTypes.typecast(entry.type, py_object_type, "o")))
                 elif entry.type.from_py_function:
                     rhs = "%s(o)" % entry.type.from_py_function
                     if entry.type.is_enum:
                         rhs = PyrexTypes.typecast(entry.type, PyrexTypes.c_long_type, rhs)
                     code.putln("%s = %s; if (%s) %s;" % (
-                        entry.cname,
+                        entry.c_binding.name,
                         rhs,
-                        entry.type.error_condition(entry.cname),
+                        entry.type.error_condition(entry.c_binding.name),
                         code.error_goto(entry.pos)))
                 else:
                     code.putln('PyErr_Format(PyExc_TypeError, "Cannot convert Python object %s to %s");' % (name, entry.type))
@@ -1864,7 +1871,8 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 if entry.visibility != 'extern':
                     if entry.type.is_pyobject and entry.used:
                         code.putln("Py_DECREF(%s); %s = 0;" % (
-                            code.entry_as_pyobject(entry), entry.cname))
+                            code.entry_as_pyobject(entry),
+                            entry.c_binding.name))
         code.putln("__Pyx_CleanupGlobals();")
         if Options.generate_cleanup_code >= 3:
             code.putln("/*--- Type import cleanup code ---*/")
@@ -1873,7 +1881,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         if Options.cache_builtins:
             code.putln("/*--- Builtin cleanup code ---*/")
             for entry in env.cached_builtins:
-                code.put_decref_clear(entry.cname,
+                code.put_decref_clear(entry.c_binding.name,
                                       PyrexTypes.py_object_type,
                                       nanny=False)
         code.putln("/*--- Intern cleanup code ---*/")
@@ -1881,7 +1889,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                               PyrexTypes.py_object_type,
                               nanny=False)
 #        for entry in env.pynum_entries:
-#            code.put_decref_clear(entry.cname,
+#            code.put_decref_clear(entry.c_binding.name,
 #                                  PyrexTypes.py_object_type,
 #                                  nanny=False)
 #        for entry in env.all_pystring_entries:
@@ -1892,7 +1900,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
 #        for entry in env.default_entries:
 #            if entry.type.is_pyobject and entry.used:
 #                code.putln("Py_DECREF(%s); %s = 0;" % (
-#                    code.entry_as_pyobject(entry), entry.cname))
+#                    code.entry_as_pyobject(entry), entry.c_binding.name))
         code.putln("Py_INCREF(Py_None); return Py_None;")
 
     def generate_main_method(self, env, code):
@@ -1990,12 +1998,12 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
     def generate_c_function_export_code(self, env, code):
         # Generate code to create PyCFunction wrappers for exported C functions.
         for entry in env.cfunc_entries:
-            if entry.api or entry.defined_in_pxd:
+            if entry.c_binding.api or entry.defined_in_pxd:
                 env.use_utility_code(function_export_utility_code)
                 signature = entry.type.signature_string()
                 code.putln('if (__Pyx_ExportFunction("%s", (void (*)(void))%s, "%s") < 0) %s' % (
-                    entry.name,
-                    entry.cname,
+                    entry.python_binding.name,
+                    entry.c_binding.name,
                     signature,
                     code.error_goto(self.pos)))
 
@@ -2027,8 +2035,8 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 code.putln(
                     'if (__Pyx_ImportFunction(%s, "%s", (void (**)(void))&%s, "%s") < 0) %s' % (
                         temp,
-                        entry.name,
-                        entry.cname,
+                        entry.python_binding.name,
+                        entry.c_binding.name,
                         entry.type.signature_string(),
                         code.error_goto(self.pos)))
             code.putln("Py_DECREF(%s); %s = 0;" % (temp, temp))
@@ -2131,7 +2139,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                         code.putln(
                             'PyObject *wrapper = __Pyx_GetAttrString((PyObject *)&%s, "%s"); %s' % (
                                 typeobj_cname,
-                                func.name,
+                                func.python_binding.name,
                                 code.error_goto_if_null('wrapper', entry.pos)))
                         code.putln(
                             "if (Py_TYPE(wrapper) == &PyWrapperDescr_Type) {")
@@ -2174,7 +2182,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                             tp_weaklistoffset,
                             tp_weaklistoffset,
                             objstruct,
-                            weakref_entry.cname))
+                            weakref_entry.c_binding.name))
                     else:
                         error(weakref_entry.pos, "__weakref__ slot must be of type 'object'")
 
@@ -2203,7 +2211,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                     code.putln(
                         "%s.%s = %s%s;" % (
                             type.vtable_cname,
-                            meth_entry.cname,
+                            meth_entry.c_binding.name,
                             cast,
                             meth_entry.func_cname))
 

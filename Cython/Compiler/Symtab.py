@@ -4,6 +4,7 @@
 
 import re
 from Cython import Utils
+from Binding import CSource, CBinding, PythonBinding
 from Errors import warning, error, InternalError
 from StringEncoding import EncodedString
 import Options, Naming
@@ -58,8 +59,9 @@ class BufferAux(object):
 class Entry(object):
     # A symbol table entry in a Scope or ModuleNamespace.
     #
-    # name             string     Python name of entity
-    # cname            string     C name of entity
+    # c_source         CSource
+    # c_binding        CBinding
+    # python_binding   PythonBinding
     # type             PyrexType  Type of entity
     # doc              string     Doc string
     # init             string     Initial value
@@ -115,7 +117,6 @@ class Entry(object):
     # is_special       boolean    Is a special method or property accessor
     #                               of an extension type
     # defined_in_pxd   boolean    Is defined in a .pxd file (not just declared)
-    # api              boolean    Generate C API for C class or function
     # utility_code     string     Utility code needed when this entry is used
     #
     # buffer_aux       BufferAux or None  Extra information needed for buffer variables
@@ -125,6 +126,9 @@ class Entry(object):
     # might_overflow   boolean    In an arithmetic expression that could cause
     #                             overflow (used for type inference).
 
+    c_source = None
+    c_binding = None
+    python_binding = None
     inline_func_in_pxd = False
     borrowed = 0
     init = ""
@@ -170,7 +174,6 @@ class Entry(object):
     is_special = 0
     defined_in_pxd = 0
     is_implemented = 0
-    api = 0
     utility_code = None
     is_overridable = 0
     buffer_aux = None
@@ -178,8 +181,14 @@ class Entry(object):
     might_overflow = 0
 
     def __init__(self, name, cname, type, pos = None, init = None):
-        self.name = name
-        self.cname = cname
+        if not self.c_source:
+            self.c_source = CSource()
+        if not self.c_binding:
+            self.c_binding = CBinding()
+        if not self.python_binding:
+            self.python_binding = PythonBinding()
+        self.python_binding.name = name
+        self.c_binding.name = cname
         self.type = type
         self.pos = pos
         self.init = init
@@ -187,10 +196,12 @@ class Entry(object):
         self.assignments = []
 
     def __repr__(self):
-        return "Entry(name=%s, type=%s)" % (self.name, self.type)
+        return "Entry(name=%s, type=%s)" % (
+            self.python_binding.name, self.type)
 
     def redeclared(self, pos):
-        error(pos, "'%s' does not match previous declaration" % self.name)
+        error(pos, "'%s' does not match previous declaration" %
+              self.python_binding.name)
         error(self.pos, "Previous declaration is here")
 
     def all_alternatives(self):
@@ -474,12 +485,13 @@ class Scope(object):
     def check_previous_typedef_flag(self, entry, typedef_flag, pos):
         if typedef_flag != entry.type.typedef_flag:
             error(pos, "'%s' previously declared using '%s'" % (
-                entry.name, ("cdef", "ctypedef")[entry.type.typedef_flag]))
+                entry.python_binding.name,
+                ("cdef", "ctypedef")[entry.type.typedef_flag]))
 
     def check_previous_visibility(self, entry, visibility, pos):
         if entry.visibility != visibility:
             error(pos, "'%s' previously declared as '%s'" % (
-                entry.name, entry.visibility))
+                entry.python_binding.name, entry.visibility))
 
     def declare_enum(self, name, pos, cname, typedef_flag,
             visibility = 'private'):
@@ -541,7 +553,7 @@ class Scope(object):
             self.declare_var(name, py_object_type, pos, visibility=visibility)
         entry = self.declare_var(None, py_object_type, pos,
                                  cname=name, visibility='private')
-        entry.name = EncodedString(name)
+        entry.python_binding.name = EncodedString(name)
         entry.qualified_name = self.qualify_name(name)
         entry.signature = pyfunction_signature
         entry.is_anonymous = True
@@ -551,7 +563,7 @@ class Scope(object):
         # Add an entry for an anonymous Python function.
         entry = self.declare_var(None, py_object_type, pos,
                                  cname=func_cname, visibility='private')
-        entry.name = EncodedString(func_cname)
+        entry.python_binding.name = EncodedString(func_cname)
         entry.func_cname = func_cname
         entry.signature = pyfunction_signature
         entry.is_anonymous = True
@@ -585,7 +597,8 @@ class Scope(object):
                         # if all alternatives have different cnames,
                         # it's safe to allow signature overrides
                         for alt_entry in entry.all_alternatives():
-                            if not alt_entry.cname or cname == alt_entry.cname:
+                            if (not alt_entry.c_binding.name or
+                                cname == alt_entry.c_binding.name):
                                 break # cname not unique!
                         else:
                             can_override = True
@@ -604,7 +617,7 @@ class Scope(object):
         if in_pxd and visibility != 'extern':
             entry.defined_in_pxd = 1
         if api:
-            entry.api = 1
+            entry.c_binding.api = 1
         if not defining and not in_pxd and visibility != 'extern':
             error(pos, "Non-extern C function '%s' declared but not defined" % name)
         if defining:
@@ -782,7 +795,7 @@ class BuiltinScope(Scope):
         entry = self.declare_type(name, type, None, visibility='extern')
         entry.utility_code = utility_code
 
-        var_entry = Entry(name = entry.name,
+        var_entry = Entry(name = entry.python_binding.name,
             type = self.lookup('type').type, # make sure "type" is the first type declared...
             pos = entry.pos,
             cname = "((PyObject*)%s)" % entry.type.typeptr_cname)
@@ -911,14 +924,14 @@ class ModuleScope(Scope):
                 error(pos, "undeclared name not builtin: %s"%name)
         if Options.cache_builtins:
             for entry in self.cached_builtins:
-                if entry.name == name:
+                if entry.python_binding.name == name:
                     return entry
         entry = self.declare(None, None, py_object_type, pos, 'private')
         if Options.cache_builtins:
             entry.is_builtin = 1
             entry.is_const = 1
-            entry.name = name
-            entry.cname = Naming.builtin_prefix + name
+            entry.python_binding.name = name
+            entry.c_binding.name = Naming.builtin_prefix + name
             self.cached_builtins.append(entry)
             self.undeclared_cached_builtins.append(entry)
         else:
@@ -1111,7 +1124,7 @@ class ModuleScope(Scope):
             error(pos, "Class '%s' previously declared as '%s'"
                 % (name, entry.visibility))
         if api:
-            entry.api = 1
+            entry.c_binding.api = 1
         if objstruct_cname:
             if type.objstruct_cname and type.objstruct_cname != objstruct_cname:
                 error(pos, "Object struct name differs from previous declaration")
@@ -1155,8 +1168,10 @@ class ModuleScope(Scope):
             type.vtabslot_cname = Naming.vtabslot_cname
         if type.vtabslot_cname:
             #print "...allocating other vtable related cnames" ###
-            type.vtabstruct_cname = self.mangle(Naming.vtabstruct_prefix, entry.name)
-            type.vtabptr_cname = self.mangle(Naming.vtabptr_prefix, entry.name)
+            type.vtabstruct_cname = self.mangle(
+                Naming.vtabstruct_prefix, entry.python_binding.name)
+            type.vtabptr_cname = self.mangle(
+                Naming.vtabptr_prefix, entry.python_binding.name)
 
     def check_c_classes_pxd(self):
         # Performs post-analysis checking and finishing up of extension types
@@ -1172,11 +1187,12 @@ class ModuleScope(Scope):
         for entry in self.c_class_entries:
             # Check defined
             if not entry.type.scope:
-                error(entry.pos, "C class '%s' is declared but not defined" % entry.name)
+                error(entry.pos, "C class '%s' is declared but not defined"
+                      % entry.python_binding.name)
 
     def check_c_class(self, entry):
         type = entry.type
-        name = entry.name
+        name = entry.python_binding.name
         visibility = entry.visibility
         # Check defined
         if not type.scope:
@@ -1191,11 +1207,12 @@ class ModuleScope(Scope):
             for method_entry in type.scope.cfunc_entries:
                 if not method_entry.is_inherited and not method_entry.func_cname:
                     error(method_entry.pos, "C method '%s' is declared but not defined" %
-                        method_entry.name)
+                        method_entry.python_binding.name)
         # Allocate vtable name if necessary
         if type.vtabslot_cname:
             #print "ModuleScope.check_c_classes: allocating vtable cname for", self ###
-            type.vtable_cname = self.mangle(Naming.vtable_prefix, entry.name)
+            type.vtable_cname = self.mangle(
+                Naming.vtable_prefix, entry.python_binding.name)
 
     def check_c_classes(self):
         # Performs post-analysis checking and finishing up of extension types
@@ -1216,7 +1233,7 @@ class ModuleScope(Scope):
             print("Scope.check_c_classes: checking scope " + self.qualified_name)
         for entry in self.c_class_entries:
             if debug_check_c_classes:
-                print("...entry %s %s" % (entry.name, entry))
+                print("...entry %s %s" % (entry.python_binding.name, entry))
                 print("......type = ",  entry.type)
                 print("......visibility = ", entry.visibility)
             self.check_c_class(entry)
@@ -1241,7 +1258,7 @@ class ModuleScope(Scope):
         # we use a read-only C global variable whose name is an
         # expression that refers to the type object.
         import Builtin
-        var_entry = Entry(name = entry.name,
+        var_entry = Entry(name = entry.python_binding.name,
             type = Builtin.type_type,
             pos = entry.pos,
             cname = "((PyObject*)%s)" % entry.type.typeptr_cname)
@@ -1314,7 +1331,9 @@ class LocalScope(Scope):
                 # on the outside and inside, so we make a new entry
                 entry.in_closure = True
                 # Would it be better to declare_var here?
-                inner_entry = Entry(entry.name, entry.cname, entry.type, entry.pos)
+                inner_entry = Entry(
+                    entry.python_binding.name, entry.c_binding.name,
+                    entry.type, entry.pos)
                 inner_entry.scope = self
                 inner_entry.is_variable = True
                 inner_entry.outer_entry = entry
@@ -1326,16 +1345,18 @@ class LocalScope(Scope):
     def mangle_closure_cnames(self, outer_scope_cname):
         for entry in self.entries.values():
             if entry.from_closure:
-                cname = entry.outer_entry.cname
+                cname = entry.outer_entry.c_binding.name
                 if self.is_passthrough:
-                    entry.cname = cname
+                    entry.c_binding.name = cname
                 else:
                     if cname.startswith(Naming.cur_scope_cname):
                         cname = cname[len(Naming.cur_scope_cname)+2:]
-                    entry.cname = "%s->%s" % (outer_scope_cname, cname)
+                    entry.c_binding.name = "%s->%s" % (
+                        outer_scope_cname, cname)
             elif entry.in_closure:
-                entry.original_cname = entry.cname
-                entry.cname = "%s->%s" % (Naming.cur_scope_cname, entry.cname)
+                entry.original_cname = entry.c_binding.name
+                entry.c_binding.name = "%s->%s" % (
+                    Naming.cur_scope_cname, entry.c_binding.name)
 
 class GeneratorExpressionScope(Scope):
     """Scope for generator expressions and comprehensions.  As opposed
@@ -1662,17 +1683,20 @@ class CClassScope(ClassScope):
         # inherited type, with cnames modified appropriately
         # to work with this type.
         def adapt(cname):
-            return "%s.%s" % (Naming.obj_base_cname, base_entry.cname)
+            return "%s.%s" % (Naming.obj_base_cname, base_entry.c_binding.name)
         for base_entry in \
             base_scope.inherited_var_entries + base_scope.var_entries:
-                entry = self.declare(base_entry.name, adapt(base_entry.cname),
+                entry = self.declare(
+                    base_entry.python_binding.name,
+                    adapt(base_entry.c_binding.name),
                     base_entry.type, None, 'private')
                 entry.is_variable = 1
                 self.inherited_var_entries.append(entry)
         for base_entry in base_scope.cfunc_entries:
-            entry = self.add_cfunction(base_entry.name, base_entry.type,
-                                       base_entry.pos, adapt(base_entry.cname),
-                                       base_entry.visibility, base_entry.func_modifiers)
+            entry = self.add_cfunction(
+                base_entry.python_binding.name, base_entry.type,
+                base_entry.pos, adapt(base_entry.c_binding.name),
+                base_entry.visibility, base_entry.func_modifiers)
             entry.is_inherited = 1
 
 
@@ -1751,42 +1775,39 @@ class CppClassScope(Scope):
         for base_entry in \
             base_scope.inherited_var_entries + base_scope.var_entries:
                 #contructor is not inherited
-                if base_entry.name == "<init>":
+                if base_entry.python_binding.name == "<init>":
                     continue
-                #print base_entry.name, self.entries
-                if base_entry.name in self.entries:
-                    base_entry.name
-                entry = self.declare(base_entry.name, base_entry.cname,
+                #print base_entry.python_binding.name, self.entries
+                if base_entry.python_binding.name in self.entries:
+                    base_entry.python_binding.name
+                entry = self.declare(
+                    base_entry.python_binding.name, base_entry.c_binding.name,
                     base_entry.type, None, 'extern')
                 entry.is_variable = 1
                 self.inherited_var_entries.append(entry)
         for base_entry in base_scope.cfunc_entries:
-            entry = self.declare_cfunction(base_entry.name, base_entry.type,
-                                       base_entry.pos, base_entry.cname,
-                                       base_entry.visibility, base_entry.func_modifiers,
-                                           utility_code = base_entry.utility_code)
+            entry = self.declare_cfunction(
+                base_entry.python_binding.name, base_entry.type,
+                base_entry.pos, base_entry.c_binding.name,
+                base_entry.visibility, base_entry.func_modifiers,
+                utility_code = base_entry.utility_code)
             entry.is_inherited = 1
 
     def specialize(self, values):
         scope = CppClassScope(self.name, self.outer_scope)
         for entry in self.entries.values():
             if entry.is_type:
-                scope.declare_type(entry.name,
-                                    entry.type.specialize(values),
-                                    entry.pos,
-                                    entry.cname)
+                scope.declare_type(
+                    entry.python_binding.name, entry.type.specialize(values),
+                    entry.pos, entry.c_binding.name)
             else:
-#                scope.declare_var(entry.name,
-#                                    entry.type.specialize(values),
-#                                    entry.pos,
-#                                    entry.cname,
-#                                    entry.visibility)
+#                scope.declare_var(
+#                    entry.python_binding.name, entry.type.specialize(values),
+#                    entry.pos, entry.c_binding.name, entry.visibility)
                 for e in entry.all_alternatives():
-                    scope.declare_cfunction(e.name,
-                                            e.type.specialize(values),
-                                            e.pos,
-                                            e.cname,
-                                            utility_code = e.utility_code)
+                    scope.declare_cfunction(
+                        e.python_binding.name, e.type.specialize(values),
+                        e.pos, e.c_binding.name, utility_code = e.utility_code)
         return scope
 
     def add_include_file(self, filename):

@@ -1146,17 +1146,18 @@ property NAME:
         elif entry.visibility == 'readonly':
             template = self.basic_property_ro
         property = template.substitute({
-                u"ATTR": ExprNodes.AttributeNode(pos=entry.pos,
-                                                 obj=ExprNodes.NameNode(pos=entry.pos, name="self"),
-                                                 attribute=entry.name),
+                u"ATTR": ExprNodes.AttributeNode(
+                    pos=entry.pos,
+                    obj=ExprNodes.NameNode(pos=entry.pos, name="self"),
+                    attribute=entry.python_binding.name),
             }, pos=entry.pos).stats[0]
-        property.name = entry.name
+        property.name = entry.python_binding.name
         # ---------------------------------------
         # XXX This should go to AutoDocTransforms
         # ---------------------------------------
         if (Options.docstrings and
             self.current_directives['embedsignature']):
-            attr_name = entry.name
+            attr_name = entry.python_binding.name
             type_name = entry.type.declaration_code("", for_display=1)
             default_value = ''
             if not entry.type.is_pyobject:
@@ -1389,7 +1390,9 @@ class CreateClosureClasses(CythonTransform):
             node.needs_outer_scope = True
             return
 
-        as_name = '%s_%s' % (target_module_scope.next_id(Naming.closure_class_prefix), node.entry.cname)
+        as_name = '%s_%s' % (
+            target_module_scope.next_id(Naming.closure_class_prefix),
+            node.entry.c_binding.name)
 
         entry = target_module_scope.declare_c_class(name = as_name,
             pos = node.pos, defining = True, implementing = True)
@@ -1408,8 +1411,8 @@ class CreateClosureClasses(CythonTransform):
             node.needs_outer_scope = True
         for name, entry in in_closure:
             class_scope.declare_var(pos=entry.pos,
-                                    name=entry.name,
-                                    cname=entry.cname,
+                                    name=entry.python_binding.name,
+                                    cname=entry.c_binding.name,
                                     type=entry.type,
                                     is_cdef=True)
         node.needs_closure = True
@@ -1655,7 +1658,7 @@ class DebugTransform(CythonTransform):
             pf_cname = node.py_func.entry.func_cname
 
         attrs = dict(
-            name=node.entry.name,
+            name=node.entry.python_binding.name,
             cname=node.entry.func_cname,
             pf_cname=pf_cname,
             qualified_name=node.local_scope.qualified_name,
@@ -1755,17 +1758,17 @@ class DebugTransform(CythonTransform):
                 # We're dealing with a closure where a variable from an outer
                 # scope is accessed, get it from the scope object.
                 cname = '%s->%s' % (Naming.cur_scope_cname,
-                                    entry.outer_entry.cname)
+                                    entry.outer_entry.c_binding.name)
 
                 qname = '%s.%s.%s' % (entry.scope.outer_scope.qualified_name,
                                       entry.scope.name,
-                                      entry.name)
+                                      entry.python_binding.name)
             elif entry.in_closure:
                 cname = '%s->%s' % (Naming.cur_scope_cname,
-                                    entry.cname)
+                                    entry.c_binding.name)
                 qname = entry.qualified_name
             else:
-                cname = entry.cname
+                cname = entry.c_binding.name
                 qname = entry.qualified_name
 
             if not entry.pos:
@@ -1777,7 +1780,7 @@ class DebugTransform(CythonTransform):
                 lineno = str(entry.pos[1])
 
             attrs = dict(
-                name=entry.name,
+                name=entry.python_binding.name,
                 cname=cname,
                 qualified_name=qname,
                 type=vartype,
