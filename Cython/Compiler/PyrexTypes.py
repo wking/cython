@@ -1908,7 +1908,7 @@ class CFuncType(CType):
     
     def opt_arg_cname(self, arg_name):
         return self.op_arg_struct.base_type.scope.lookup(
-            arg_name).c_name
+            arg_name).cname
 
 
 class CFuncTypeArg(object):
@@ -1964,7 +1964,7 @@ class StructUtilityCode(object):
             nameconst_cname = code.get_py_string_const(
                 member.name, identifier=True)
             code.putln("member = %s(s.%s); if (member == NULL) goto bad;" % (
-                member.type.to_py_function, member.c_name))
+                member.type.to_py_function, member.cname))
             code.putln("if (PyDict_SetItem(res, %s, member) < 0) goto bad;" % nameconst_cname)
             code.putln("Py_DECREF(member);")
         code.putln("return res;")

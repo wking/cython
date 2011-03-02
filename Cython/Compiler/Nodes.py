@@ -1016,7 +1016,7 @@ class CStructOrUnionDefNode(StatNode):
                         cname = self.cname, visibility='ignore')
                     struct_entry.type.typedef_flag = False
                     # FIXME: this might be considered a hack ;-)
-                    struct_entry.c_name = struct_entry.type.cname = (
+                    struct_entry.cname = struct_entry.type.cname = (
                         '_' + self.entry.type.typedef_cname)
 
     def analyse_expressions(self, env):
@@ -1094,7 +1094,7 @@ class CEnumDefNode(StatNode):
             for item in self.entry.enum_values:
                 code.putln("%s = PyInt_FromLong(%s); %s" % (
                         temp,
-                        item.c_name,
+                        item.cname,
                         code.error_goto_if_null(temp, item.pos)))
                 code.put_gotref(temp)
                 code.putln('if (__Pyx_SetAttrString(%s, "%s", %s) < 0) %s' % (
@@ -1198,7 +1198,7 @@ class FuncDefNode(StatNode, BlockNode):
         if self.needs_closure:
             lenv = ClosureScope(name=self.entry.name,
                                 outer_scope = genv,
-                                scope_name=self.entry.c_name)
+                                scope_name=self.entry.cname)
         else:
             lenv = LocalScope(name=self.entry.name,
                               outer_scope=genv,
@@ -1368,7 +1368,7 @@ class FuncDefNode(StatNode, BlockNode):
         for entry in lenv.var_entries + lenv.arg_entries:
             if entry.type.is_buffer and entry.buffer_aux.buffer_info_var.used:
                 code.putln("%s.buf = NULL;" %
-                           entry.buffer_aux.buffer_info_var.c_name)
+                           entry.buffer_aux.buffer_info_var.cname)
         # ----- Check and convert arguments
         self.generate_argument_type_tests(code)
         # ----- Acquire buffer arguments
@@ -1409,7 +1409,7 @@ class FuncDefNode(StatNode, BlockNode):
                 code.putln("__Pyx_ErrFetch(&__pyx_type, &__pyx_value, &__pyx_tb);")
                 for entry in lenv.buffer_entries:
                     Buffer.put_release_buffer_code(code, entry)
-                    #code.putln("%s = 0;" % entry.c_name)
+                    #code.putln("%s = 0;" % entry.cname)
                 code.putln("__Pyx_ErrRestore(__pyx_type, __pyx_value, __pyx_tb);}")
 
             err_val = self.error_value()
@@ -1464,7 +1464,7 @@ class FuncDefNode(StatNode, BlockNode):
                 if entry.used and not entry.in_closure:
                     code.put_var_decref(entry)
                 elif entry.in_closure and self.needs_closure:
-                    code.put_giveref(entry.c_name)
+                    code.put_giveref(entry.cname)
         # Decref any increfed args
         for entry in lenv.arg_entries:
             if entry.type.is_pyobject:
@@ -1534,7 +1534,7 @@ class FuncDefNode(StatNode, BlockNode):
         if arg.type.typeobj_is_available():
             code.globalstate.use_utility_code(arg_type_test_utility_code)
             typeptr_cname = arg.type.typeptr_cname
-            arg_code = "((PyObject *)%s)" % arg.entry.c_name
+            arg_code = "((PyObject *)%s)" % arg.entry.cname
             code.putln(
                 'if (unlikely(!__Pyx_ArgTypeTest(%s, %s, %d, "%s", %s))) %s' % (
                     arg_code,
@@ -1550,7 +1550,7 @@ class FuncDefNode(StatNode, BlockNode):
     def generate_arg_none_check(self, arg, code):
         # Generate None check for one argument.
         code.putln('if (unlikely(((PyObject *)%s) == Py_None)) {' %
-                   arg.entry.c_name)
+                   arg.entry.cname)
         code.putln('''PyErr_Format(PyExc_TypeError, "Argument '%s' must not be None"); %s''' % (
             arg.name,
             code.error_goto(arg.pos)))
@@ -1584,7 +1584,7 @@ class FuncDefNode(StatNode, BlockNode):
     # Special code for the __getbuffer__ function
     #
     def getbuffer_init(self, code):
-        info = self.local_scope.arg_entries[1].c_name
+        info = self.local_scope.arg_entries[1].cname
         # Python 3.0 betas have a bug in memoryview which makes it call
         # getbuffer with a NULL parameter. For now we work around this;
         # the following line should be removed when this bug is fixed.
@@ -1593,13 +1593,13 @@ class FuncDefNode(StatNode, BlockNode):
         code.put_giveref("%s->obj" % info) # Do not refnanny object within structs
 
     def getbuffer_error_cleanup(self, code):
-        info = self.local_scope.arg_entries[1].c_name
+        info = self.local_scope.arg_entries[1].cname
         code.put_gotref("%s->obj" % info)
         code.putln("__Pyx_DECREF(%s->obj); %s->obj = NULL;" %
                    (info, info))
 
     def getbuffer_normal_cleanup(self, code):
-        info = self.local_scope.arg_entries[1].c_name
+        info = self.local_scope.arg_entries[1].cname
         code.putln("if (%s->obj == Py_None) {" % info)
         code.put_gotref("Py_None")
         code.putln("__Pyx_DECREF(Py_None); %s->obj = NULL;" % info)
@@ -2432,19 +2432,19 @@ class DefNode(FuncDefNode):
             if arg.is_generic:
                 item = PyrexTypes.typecast(arg.type, PyrexTypes.py_object_type, item)
             entry = arg.entry
-            code.putln("%s = %s;" % (entry.c_name, item))
+            code.putln("%s = %s;" % (entry.cname, item))
             if entry.in_closure:
                 code.put_var_incref(entry)
         else:
             func = arg.type.from_py_function
             if func:
                 code.putln("%s = %s(%s); %s" % (
-                    arg.entry.c_name,
+                    arg.entry.cname,
                     func,
                     item,
                     code.error_goto_if(
                             arg.type.error_condition(
-                                arg.entry.c_name),
+                                arg.entry.cname),
                             arg.pos)))
             else:
                 error(arg.pos, "Cannot convert Python object argument to type '%s'" % arg.type)
@@ -2482,34 +2482,34 @@ class DefNode(FuncDefNode):
 
         if self.starstar_arg:
             code.putln("%s = (%s) ? PyDict_Copy(%s) : PyDict_New();" % (
-                    self.starstar_arg.entry.c_name,
+                    self.starstar_arg.entry.cname,
                     Naming.kwds_cname,
                     Naming.kwds_cname))
             code.putln("if (unlikely(!%s)) return %s;" % (
-                    self.starstar_arg.entry.c_name,
+                    self.starstar_arg.entry.cname,
                     self.error_value()))
             self.starstar_arg.entry.xdecref_cleanup = 0
-            code.put_gotref(self.starstar_arg.entry.c_name)
+            code.put_gotref(self.starstar_arg.entry.cname)
 
         if self.self_in_stararg:
             # need to create a new tuple with 'self' inserted as first item
             code.put("%s = PyTuple_New(PyTuple_GET_SIZE(%s)+1); if (unlikely(!%s)) " % (
-                    self.star_arg.entry.c_name,
+                    self.star_arg.entry.cname,
                     Naming.args_cname,
-                    self.star_arg.entry.c_name))
+                    self.star_arg.entry.cname))
             if self.starstar_arg:
                 code.putln("{")
                 code.put_decref_clear(
-                    self.starstar_arg.entry.c_name, py_object_type)
+                    self.starstar_arg.entry.cname, py_object_type)
                 code.putln("return %s;" % self.error_value())
                 code.putln("}")
             else:
                 code.putln("return %s;" % self.error_value())
-            code.put_gotref(self.star_arg.entry.c_name)
+            code.put_gotref(self.star_arg.entry.cname)
             code.put_incref(Naming.self_cname, py_object_type)
             code.put_giveref(Naming.self_cname)
             code.putln("PyTuple_SET_ITEM(%s, 0, %s);" % (
-                self.star_arg.entry.c_name, Naming.self_cname))
+                self.star_arg.entry.cname, Naming.self_cname))
             temp = code.funcstate.allocate_temp(PyrexTypes.c_py_ssize_t_type, manage_ref=False)
             code.putln("for (%s=0; %s < PyTuple_GET_SIZE(%s); %s++) {" % (
                 temp, temp, Naming.args_cname, temp))
@@ -2518,14 +2518,14 @@ class DefNode(FuncDefNode):
             code.put_incref("item", py_object_type)
             code.put_giveref("item")
             code.putln("PyTuple_SET_ITEM(%s, %s+1, item);" % (
-                self.star_arg.entry.c_name, temp))
+                self.star_arg.entry.cname, temp))
             code.putln("}")
             code.funcstate.release_temp(temp)
             self.star_arg.entry.xdecref_cleanup = 0
         elif self.star_arg:
             code.put_incref(Naming.args_cname, py_object_type)
             code.putln("%s = %s;" % (
-                    self.star_arg.entry.c_name,
+                    self.star_arg.entry.cname,
                     Naming.args_cname))
             self.star_arg.entry.xdecref_cleanup = 0
 
@@ -2642,41 +2642,41 @@ class DefNode(FuncDefNode):
             if arg.is_generic and arg.default:
                 code.putln(
                     "%s = %s;" % (
-                        arg.entry.c_name,
+                        arg.entry.cname,
                         arg.calculate_default_value_code(code)))
 
     def generate_stararg_init_code(self, max_positional_args, code):
         if self.starstar_arg:
             self.starstar_arg.entry.xdecref_cleanup = 0
             code.putln('%s = PyDict_New(); if (unlikely(!%s)) return %s;' % (
-                    self.starstar_arg.entry.c_name,
-                    self.starstar_arg.entry.c_name,
+                    self.starstar_arg.entry.cname,
+                    self.starstar_arg.entry.cname,
                     self.error_value()))
-            code.put_gotref(self.starstar_arg.entry.c_name)
+            code.put_gotref(self.starstar_arg.entry.cname)
         if self.star_arg:
             self.star_arg.entry.xdecref_cleanup = 0
             code.putln('if (PyTuple_GET_SIZE(%s) > %d) {' % (
                     Naming.args_cname,
                     max_positional_args))
             code.put('%s = PyTuple_GetSlice(%s, %d, PyTuple_GET_SIZE(%s)); ' % (
-                    self.star_arg.entry.c_name, Naming.args_cname,
+                    self.star_arg.entry.cname, Naming.args_cname,
                     max_positional_args, Naming.args_cname))
-            code.put_gotref(self.star_arg.entry.c_name)
+            code.put_gotref(self.star_arg.entry.cname)
             if self.starstar_arg:
                 code.putln("")
                 code.putln("if (unlikely(!%s)) {" %
-                           self.star_arg.entry.c_name)
+                           self.star_arg.entry.cname)
                 code.put_decref_clear(
-                    self.starstar_arg.entry.c_name, py_object_type)
+                    self.starstar_arg.entry.cname, py_object_type)
                 code.putln('return %s;' % self.error_value())
                 code.putln('}')
             else:
                 code.putln("if (unlikely(!%s)) return %s;" % (
-                        self.star_arg.entry.c_name,
+                        self.star_arg.entry.cname,
                         self.error_value()))
             code.putln('} else {')
             code.put("%s = %s; " % (
-                    self.star_arg.entry.c_name, Naming.empty_tuple))
+                    self.star_arg.entry.cname, Naming.empty_tuple))
             code.put_incref(Naming.empty_tuple, py_object_type)
             code.putln('}')
 
@@ -2818,7 +2818,7 @@ class DefNode(FuncDefNode):
                 Naming.kwds_cname,
                 Naming.pykwdlist_cname,
                 (self.starstar_arg and
-                 self.starstar_arg.entry.c_name or
+                 self.starstar_arg.entry.cname or
                  '0'),
                 pos_arg_count,
                 self.name))
@@ -2834,7 +2834,7 @@ class DefNode(FuncDefNode):
                 code.putln('} else {')
                 code.putln(
                     "%s = %s;" % (
-                        arg.entry.c_name,
+                        arg.entry.cname,
                         arg.calculate_default_value_code(code)))
                 code.putln('}')
 
@@ -2847,7 +2847,7 @@ class DefNode(FuncDefNode):
                 self.generate_arg_conversion(arg, code)
             elif arg.entry.in_closure:
                 code.putln('%s = %s;' % (
-                        arg.entry.c_name, arg.hdr_cname))
+                        arg.entry.cname, arg.hdr_cname))
                 if arg.type.is_pyobject:
                     code.put_var_incref(arg.entry)
 
@@ -2867,7 +2867,7 @@ class DefNode(FuncDefNode):
         else:
             if new_type.assignable_from(old_type):
                 code.putln(
-                    "%s = %s;" % (arg.entry.c_name, arg.hdr_cname))
+                    "%s = %s;" % (arg.entry.cname, arg.hdr_cname))
             else:
                 error(arg.pos,
                     "Cannot convert 1 argument from '%s' to '%s'" %
@@ -2878,7 +2878,7 @@ class DefNode(FuncDefNode):
         func = new_type.from_py_function
         # copied from CoerceFromPyTypeNode
         if func:
-            lhs = arg.entry.c_name
+            lhs = arg.entry.cname
             rhs = "%s(%s)" % (func, arg.hdr_cname)
             if new_type.is_enum:
                 rhs = PyrexTypes.typecast(new_type, PyrexTypes.c_long_type, rhs)
@@ -2886,7 +2886,7 @@ class DefNode(FuncDefNode):
                 lhs,
                 rhs,
                 code.error_goto_if(
-                        new_type.error_condition(arg.entry.c_name),
+                        new_type.error_condition(arg.entry.cname),
                         arg.pos)))
         else:
             error(arg.pos,
@@ -2898,10 +2898,10 @@ class DefNode(FuncDefNode):
         func = old_type.to_py_function
         if func:
             code.putln("%s = %s(%s); %s" % (
-                arg.entry.c_name,
+                arg.entry.cname,
                 func,
                 arg.hdr_cname,
-                code.error_goto_if_null(arg.entry.c_name, arg.pos)))
+                code.error_goto_if_null(arg.entry.cname, arg.pos)))
             code.put_var_gotref(arg.entry)
         else:
             error(arg.pos,
@@ -2965,7 +2965,7 @@ class OverrideCheckNode(StatNode):
         if self.py_func.is_module_scope:
             self_arg = "((PyObject *)%s)" % Naming.module_cname
         else:
-            self_arg = "((PyObject *)%s)" % self.args[0].c_name
+            self_arg = "((PyObject *)%s)" % self.args[0].cname
         code.putln("/* Check if called by wrapper */")
         code.putln("if (unlikely(%s)) ;" % Naming.skip_dispatch_cname)
         code.putln("/* Check if overriden in Python */")
@@ -3116,7 +3116,7 @@ class PyClassDefNode(ClassDefNode):
         self.target.analyse_target_declaration(env)
         cenv = self.create_scope(env)
         cenv.directives = env.directives
-        cenv.class_obj_cname = self.target.entry.c_name
+        cenv.class_obj_cname = self.target.entry.cname
         self.body.analyse_declarations(cenv)
 
     def analyse_expressions(self, env):

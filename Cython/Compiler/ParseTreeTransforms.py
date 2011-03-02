@@ -1394,7 +1394,7 @@ class CreateClosureClasses(CythonTransform):
 
         as_name = '%s_%s' % (
             target_module_scope.next_id(Naming.closure_class_prefix),
-            node.entry.c_name)
+            node.entry.cname)
 
         entry = target_module_scope.declare_c_class(name = as_name,
             pos = node.pos, defining = True, implementing = True)
@@ -1414,7 +1414,7 @@ class CreateClosureClasses(CythonTransform):
         for name, entry in in_closure:
             class_scope.declare_var(pos=entry.pos,
                                     name=entry.name,
-                                    cname=entry.c_name,
+                                    cname=entry.cname,
                                     type=entry.type,
                                     is_cdef=True)
         node.needs_closure = True
@@ -1760,17 +1760,17 @@ class DebugTransform(CythonTransform):
                 # We're dealing with a closure where a variable from an outer
                 # scope is accessed, get it from the scope object.
                 cname = '%s->%s' % (Naming.cur_scope_cname,
-                                    entry.outer_entry.c_name)
+                                    entry.outer_entry.cname)
 
                 qname = '%s.%s.%s' % (entry.scope.outer_scope.qualified_name,
                                       entry.scope.name,
                                       entry.name)
             elif entry.in_closure:
                 cname = '%s->%s' % (Naming.cur_scope_cname,
-                                    entry.c_name)
+                                    entry.cname)
                 qname = entry.qualified_name
             else:
-                cname = entry.c_name
+                cname = entry.cname
                 qname = entry.qualified_name
 
             if not entry.pos:

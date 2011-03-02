@@ -557,7 +557,7 @@ class GlobalState(object):
             w.exit_cfunc_scope()
 
     def put_pyobject_decl(self, entry):
-        self['global_var'].putln("static PyObject *%s;" % entry.c_name)
+        self['global_var'].putln("static PyObject *%s;" % entry.cname)
 
     # constant handling at code generation time
 
@@ -646,7 +646,7 @@ class GlobalState(object):
 
     def add_cached_builtin_decl(self, entry):
         if Options.cache_builtins:
-            if self.should_declare(entry.c_name, entry):
+            if self.should_declare(entry.cname, entry):
                 self.put_pyobject_decl(entry)
                 w = self.parts['cached_builtins']
                 if entry.name == 'xrange':
@@ -654,12 +654,12 @@ class GlobalState(object):
                     w.putln('#if PY_MAJOR_VERSION >= 3')
                     self.put_cached_builtin_init(
                         entry.pos, StringEncoding.EncodedString('range'),
-                        entry.c_name)
+                        entry.cname)
                     w.putln('#else')
                 self.put_cached_builtin_init(
                     entry.pos,
                     StringEncoding.EncodedString(entry.name),
-                    entry.c_name)
+                    entry.cname)
                 if entry.name == 'xrange':
                     w.putln('#endif')
 
@@ -1116,7 +1116,7 @@ class CCodeWriter(object):
             #print "...private and not definition, skipping" ###
             return
         if entry.c_visibility == 'private' and not entry.used:
-            #print "not used and private, skipping", entry.c_name ###
+            #print "not used and private, skipping", entry.cname ###
             return
         storage_class = ""
         if entry.extern:
@@ -1132,7 +1132,7 @@ class CCodeWriter(object):
         if (entry.extern or
             entry.c_visibility != 'public'):
             dll_linkage = None
-        self.put(entry.type.declaration_code(entry.c_name,
+        self.put(entry.type.declaration_code(entry.cname,
             dll_linkage = dll_linkage))
         if entry.init is not None:
             self.put_safe(" = %s" % entry.type.literal_code(entry.init))
@@ -1162,9 +1162,9 @@ class CCodeWriter(object):
         type = entry.type
         if (not entry.is_self_arg and not entry.type.is_complete()
             or entry.type.is_extension_type):
-            return "(PyObject *)" + entry.c_name
+            return "(PyObject *)" + entry.cname
         else:
-            return entry.c_name
+            return entry.cname
 
     def as_pyobject(self, cname, type):
         from PyrexTypes import py_object_type, typecast
@@ -1247,7 +1247,7 @@ class CCodeWriter(object):
     def put_var_decref_clear(self, entry):
         if entry.type.is_pyobject:
             self.putln("__Pyx_DECREF(%s); %s = 0;" % (
-                self.entry_as_pyobject(entry), entry.c_name))
+                self.entry_as_pyobject(entry), entry.cname))
 
     def put_var_xdecref(self, entry):
         if entry.type.is_pyobject:
@@ -1256,7 +1256,7 @@ class CCodeWriter(object):
     def put_var_xdecref_clear(self, entry):
         if entry.type.is_pyobject:
             self.putln("__Pyx_XDECREF(%s); %s = 0;" % (
-                self.entry_as_pyobject(entry), entry.c_name))
+                self.entry_as_pyobject(entry), entry.cname))
 
     def put_var_decrefs(self, entries, used_only = 0):
         for entry in entries:
@@ -1283,7 +1283,7 @@ class CCodeWriter(object):
             self.putln("%s = %s; Py_INCREF(Py_None);" % (cname, py_none))
 
     def put_init_var_to_py_none(self, entry, template = "%s", nanny=True):
-        code = template % entry.c_name
+        code = template % entry.cname
         #if entry.type.is_extension_type:
         #    code = "((PyObject*)%s)" % code
         self.put_init_to_py_none(code, entry.type, nanny)

@@ -1322,7 +1322,7 @@ class NameNode(AtomicExprNode):
     def get_constant_c_result_code(self):
         if not self.entry or self.entry.type.is_pyobject:
             return None
-        return self.entry.c_name
+        return self.entry.cname
 
     def coerce_to(self, dst_type, env):
         #  If coercing to a generic pyobject and this is a builtin
@@ -1512,7 +1512,7 @@ class NameNode(AtomicExprNode):
         entry = self.entry
         if not entry:
             return "<error>" # There was an error earlier
-        return entry.c_name
+        return entry.cname
 
     def generate_result_code(self, code):
         assert hasattr(self, 'entry')
@@ -1566,7 +1566,7 @@ class NameNode(AtomicExprNode):
             elif not Options.init_local_none and assigned is None:
                 code.putln(
                     'if (%s == 0) { PyErr_SetString(PyExc_UnboundLocalError, "%s"); %s }' %
-                    (entry.c_name, entry.name,
+                    (entry.cname, entry.name,
                      code.error_goto(self.pos)))
                 entry.scope.control_flow.set_state(
                     self.pos, (entry.name, 'initialized'), True)
@@ -1674,7 +1674,7 @@ class NameNode(AtomicExprNode):
             code.putln('%s = %s;' % (rhstmp, rhs.result_as(self.ctype())))
 
         buffer_aux = self.entry.buffer_aux
-        bufstruct = buffer_aux.buffer_info_var.c_name
+        bufstruct = buffer_aux.buffer_info_var.cname
         import Buffer
         Buffer.put_assign_to_buffer(self.result(), rhstmp, buffer_aux, self.entry.type,
                                     is_initialized=not self.lhs_of_first_assignment,
@@ -3179,11 +3179,11 @@ class SimpleCallNode(CallNode):
                         raise_py_exception = "__Pyx_CppExn2PyErr()"
                     elif func_type.exception_value.type.is_pyobject:
                         raise_py_exception = ' try { throw; } catch(const std::exception& exn) { PyErr_SetString(%s, exn.what()); } catch(...) { PyErr_SetNone(%s); }' % (
-                            func_type.exception_value.entry.c_name,
-                            func_type.exception_value.entry.c_name)
+                            func_type.exception_value.entry.cname,
+                            func_type.exception_value.entry.cname)
                     else:
                         raise_py_exception = '%s(); if (!PyErr_Occurred()) PyErr_SetString(PyExc_RuntimeError , "Error converting c++ exception.")' % (
-                            func_type.exception_value.entry.c_name)
+                            func_type.exception_value.entry.cname)
                     if self.nogil:
                         raise_py_exception = 'Py_BLOCK_THREADS; %s; Py_UNBLOCK_THREADS' % raise_py_exception
                     code.putln(
@@ -3505,7 +3505,7 @@ class AttributeNode(ExprNode):
                 # Create a temporary entry describing the C method
                 # as an ordinary function.
                 ubcm_entry = Symtab.Entry(entry.name,
-                    "%s->%s" % (type.vtabptr_cname, entry.c_name),
+                    "%s->%s" % (type.vtabptr_cname, entry.cname),
                     entry.type)
                 ubcm_entry.is_cfunction = 1
                 ubcm_entry.func_cname = entry.func_cname
@@ -3612,7 +3612,7 @@ class AttributeNode(ExprNode):
                 # because they do not have struct entries
                 if entry.is_variable or entry.is_cmethod:
                     self.type = entry.type
-                    self.member = entry.c_name
+                    self.member = entry.cname
                     return
                 else:
                     # If it's not a variable or C method, it must be a Python
@@ -4241,7 +4241,7 @@ class ListNode(SequenceNode):
             for arg, member in zip(self.args, self.type.scope.var_entries):
                 code.putln("%s.%s = %s;" % (
                         self.result(),
-                        member.c_name,
+                        member.cname,
                         arg.result()))
         else:
             raise InternalError("List type never specified")

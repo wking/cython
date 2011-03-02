@@ -64,9 +64,9 @@ class CSource(_BindingAttributes):
 class CBinding(_BindingAttributes):
     """Configure the presence and behaviour of an object's C bindings.
 
-    * c_name (string): Generated symbol name (or source name, is the
+    * cname (string): Generated symbol name (or source name, is the
       symbol is external.
-    * c_namespace (string): C++ namespace (`None` for C objects)
+    * cnamespace (string): C++ namespace (`None` for C objects)
     * api (boolean): Add to generated header file
     * visibility ('private'|'public'):
 
@@ -75,7 +75,7 @@ class CBinding(_BindingAttributes):
 
     * const (boolean): Symbol data is readonly.
     """
-    c_name = None
+    cname = None
     namespace = None
     api = 0
     c_visibility = 'private'

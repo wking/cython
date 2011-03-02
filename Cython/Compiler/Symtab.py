@@ -174,7 +174,7 @@ class Entry(Binding):
 
     def __init__(self, name, cname, type, pos = None, init = None):
         self.name = name
-        self.c_name = cname
+        self.cname = cname
         self.type = type
         self.pos = pos
         self.init = init
@@ -197,7 +197,7 @@ class WTK_Entry(Entry):
     # Binding attributes
     def __init__(self, binding, type, pos = None, init = None):
         Entry.__init__(
-            self, name=binding.name, cname=binding.c_name,
+            self, name=binding.name, cname=binding.cname,
             type=type, pos = pos, init=init)
         binding.push(self)
 
@@ -342,9 +342,9 @@ class Scope(object):
         if type.is_buffer and not isinstance(self, LocalScope):
             error(pos, ERR_BUF_LOCALONLY)
         if (not self.in_cinclude and
-            binding.c_name and re.match("^_[_A-Z]+$", binding.c_name)):
+            binding.cname and re.match("^_[_A-Z]+$", binding.cname)):
             # See http://www.gnu.org/software/libc/manual/html_node/Reserved-Names.html#Reserved-Names
-            warning(pos, "'%s' is a reserved name in C." % binding.c_name, -1)
+            warning(pos, "'%s' is a reserved name in C." % binding.cname, -1)
         entries = self.entries
         if binding.name and binding.name in entries:
             if binding.extern:
@@ -365,7 +365,7 @@ class Scope(object):
         return entry
 
     def _WTK_setup(self, name, cname, visibility):
-        binding = Binding(name=name, c_name=cname)
+        binding = Binding(name=name, cname=cname)
         if visibility == 'extern':
             binding.extern = 1
             binding.c_visibility = 'public'
@@ -391,11 +391,11 @@ class Scope(object):
     def WTK_declare_const(self, binding,
                           type, value, pos):
         # Add an entry for a named constant.
-        if not binding.c_name:
+        if not binding.cname:
             if self.in_cinclude or binding.c_visibility == 'public':
-                binding.c_name = binding.name
+                binding.cname = binding.name
             else:
-                binding.c_name = self.mangle(
+                binding.cname = self.mangle(
                     Naming.enum_prefix, binding.name)
         entry = self.WTK_declare(binding, type, pos)
         entry.is_const = 1
@@ -410,8 +410,8 @@ class Scope(object):
     def WTK_declare_type(self, binding,
                          type, defining = 1, pos = None):
         # Add an entry for a type definition.
-        if not binding.c_name:
-            binding.c_name = binding.name
+        if not binding.cname:
+            binding.cname = binding.name
         entry = self.WTK_declare(binding, type, pos)
         entry.is_type = 1
         if defining:
@@ -426,15 +426,15 @@ class Scope(object):
 
     def WTK_declare_typedef(self, binding,
                             base_type, pos):
-        if not binding.c_name:
+        if not binding.cname:
             if self.in_cinclude or binding.c_visibility == 'public':
-                binding.c_name = binding.name
+                binding.cname = binding.name
             else:
-                binding.c_name = self.mangle(
+                binding.cname = self.mangle(
                     Naming.type_prefix, binding.name)
         try:
             type = PyrexTypes.create_typedef_type(
-                binding.name, base_type, binding.c_name,
+                binding.name, base_type, binding.cname,
                 binding.extern)
         except ValueError, e:
             error(pos, e.args[0])
@@ -454,16 +454,16 @@ class Scope(object):
         self, binding,
         pos, kind, scope, typedef_flag, packed=False):
         # Add an entry for a struct or union definition.
-        if not binding.c_name:
+        if not binding.cname:
             if self.in_cinclude or binding.c_visibility == 'public':
-                binding.c_name = binding.name
+                binding.cname = binding.name
             else:
-                binding.c_name = self.mangle(
+                binding.cname = self.mangle(
                     Naming.type_prefix, binding.name)
         entry = self.lookup_here(binding.name)
         if not entry:
             type = PyrexTypes.CStructOrUnionType(
-                binding.name, kind, scope, typedef_flag, binding.c_name,
+                binding.name, kind, scope, typedef_flag, binding.cname,
                 packed)
             entry = self.WTK_declare_type(
                 binding, type,
@@ -501,12 +501,12 @@ class Scope(object):
         pos, scope, base_classes = (), templates = None):
         if not binding.extern:
             error(pos, "C++ classes may only be extern")
-        if binding.c_name is None:
-            binding.c_name = binding.name
+        if binding.cname is None:
+            binding.cname = binding.name
         entry = self.lookup_here(binding.name)
         if not entry:
             type = PyrexTypes.CppClassType(
-                binding.name, scope, binding.c_name, base_classes,
+                binding.name, scope, binding.cname, base_classes,
                 templates = templates)
             entry = self.WTK_declare_type(
                 binding, type,
@@ -586,14 +586,14 @@ class Scope(object):
     def WTK_declare_enum(self, binding, pos,
                          typedef_flag):
         if binding.name:
-            if not binding.c_name:
+            if not binding.cname:
                 if self.in_cinclude or binding.c_visibility == 'public':
-                    binding.c_name = binding.name
+                    binding.cname = binding.name
                 else:
-                    binding.c_name = self.mangle(
+                    binding.cname = self.mangle(
                         Naming.type_prefix, binding.name)
             type = PyrexTypes.CEnumType(
-                binding.name, binding.c_name, typedef_flag)
+                binding.name, binding.cname, typedef_flag)
         else:
             type = PyrexTypes.c_anon_enum_type
         entry = self.WTK_declare_type(binding, type, pos = pos)
@@ -610,11 +610,11 @@ class Scope(object):
     def WTK_declare_var(self, binding, type,
                         is_cdef = 0, pos = None):
         # Add an entry for a variable.
-        if not binding.c_name:
+        if not binding.cname:
             if binding.c_visibility != 'private':
-                binding.c_name = binding.name
+                binding.cname = binding.name
             else:
-                binding.c_name = self.mangle(
+                binding.cname = self.mangle(
                     Naming.var_prefix, binding.name)
         if type.is_cpp_class and not binding.extern:
             constructor = type.scope.lookup(u'<init>')
@@ -668,7 +668,7 @@ class Scope(object):
         else: # declare entry stub
             self.WTK_declare_var(
                 binding, py_object_type, pos = pos)
-        entry = self.WTK_declare_var(Binding(name=None, c_name=binding.name),
+        entry = self.WTK_declare_var(Binding(name=None, cname=binding.name),
                                      py_object_type, pos = pos)
         entry.name = EncodedString(binding.name)
         entry.qualified_name = self.qualify_name(binding.name)
@@ -684,8 +684,8 @@ class Scope(object):
                                     pos = None):
         # Add an entry for an anonymous Python function.
         entry = self.WTK_declare_var(binding, py_object_type, pos = pos)
-        entry.name = EncodedString(binding.c_name)
-        entry.func_cname = binding.c_name
+        entry.name = EncodedString(binding.cname)
+        entry.func_cname = binding.cname
         entry.signature = pyfunction_signature
         entry.is_anonymous = True
         return entry
@@ -710,11 +710,11 @@ class Scope(object):
         in_pxd = 0, modifiers = (), utility_code = None):
 
         # Add an entry for a C function.
-        if not binding.c_name:
+        if not binding.cname:
             if binding.api or binding.c_visibility != 'private':
-                binding.c_name = binding.name
+                binding.cname = binding.name
             else:
-                binding.c_name = self.mangle(
+                binding.cname = self.mangle(
                     Naming.func_prefix, binding.name)
         entry = self.lookup_here(binding.name)
         if entry:
@@ -728,12 +728,12 @@ class Scope(object):
                     can_override = False
                     if self.is_cpp():
                         can_override = True
-                    elif binding.c_name:
+                    elif binding.cname:
                         # if all alternatives have different cnames,
                         # it's safe to allow signature overrides
                         for alt_entry in entry.all_alternatives():
-                            if (not alt_entry.c_name or
-                                binding.c_name == alt_entry.c_name):
+                            if (not alt_entry.cname or
+                                binding.cname == alt_entry.cname):
                                 break # cname not unique!
                         else:
                             can_override = True
@@ -749,7 +749,7 @@ class Scope(object):
                     error(pos, "Function signature does not match previous declaration")
         else:
             entry = self.WTK_add_cfunction(binding, pos, type, modifiers)
-            entry.func_cname = binding.c_name
+            entry.func_cname = binding.cname
         if in_pxd and not binding.extern:
             entry.defined_in_pxd = 1
         if not defining and not in_pxd and not binding.extern:
@@ -936,7 +936,7 @@ class BuiltinScope(Scope):
             else:
                 python_equiv = EncodedString(python_equiv)
             var_entry = WTK_Entry(
-                Binding(name=python_equiv, c_name=python_equiv), py_object_type)
+                Binding(name=python_equiv, cname=python_equiv), py_object_type)
             var_entry.is_variable = 1
             var_entry.is_builtin = 1
             var_entry.utility_code = utility_code
@@ -949,7 +949,7 @@ class BuiltinScope(Scope):
 
     def WTK_declare_builtin_type(self, binding, objstruct_cname = None, utility_code = None):
         binding.name = EncodedString(binding.name)
-        type = PyrexTypes.BuiltinObjectType(binding.name, binding.c_name, objstruct_cname)
+        type = PyrexTypes.BuiltinObjectType(binding.name, binding.cname, objstruct_cname)
         # WTK: TODO: visibility checking.  CClassCcope visibility splitting
         scope = CClassScope(binding.name, outer_scope=None, visibility='extern')
         scope.directives = {}
@@ -961,7 +961,7 @@ class BuiltinScope(Scope):
         entry.utility_code = utility_code
 
         var_entry = WTK_Entry(
-            binding.deepcopy(c_name="((PyObject*)%s)" % entry.type.typeptr_cname),
+            binding.deepcopy(cname="((PyObject*)%s)" % entry.type.typeptr_cname),
             type = self.lookup('type').type, # make sure "type" is the first type declared...
             pos = entry.pos)
         var_entry.is_variable = 1
@@ -1105,7 +1105,7 @@ class ModuleScope(Scope):
             entry.is_builtin = 1
             entry.is_const = 1
             entry.name = binding.name
-            entry.c_name = Naming.builtin_prefix + binding.name
+            entry.cname = Naming.builtin_prefix + binding.name
             self.cached_builtins.append(entry)
             self.undeclared_cached_builtins.append(entry)
         else:
@@ -1294,9 +1294,9 @@ class ModuleScope(Scope):
             if objstruct_cname:
                 type.objstruct_cname = objstruct_cname
             elif binding.extern or binding.c_visibility != 'public':
-                binding.c_name = self.mangle(
+                binding.cname = self.mangle(
                     Naming.objstruct_prefix, binding.name)
-                type.objstruct_cname = binding.c_name
+                type.objstruct_cname = binding.cname
             else:
                 error(entry.pos,
                     "Object name required for 'public' or 'extern' C class")
@@ -1504,7 +1504,7 @@ class LocalScope(Scope):
 
     def declare_arg(self, name, type, pos):
         binding = self._WTK_setup(name, None, 'private')
-        binding.c_name = self.mangle(Naming.var_prefix, binding.name)
+        binding.cname = self.mangle(Naming.var_prefix, binding.name)
         return self.WTK_declare_arg(
             binding, type, pos = pos)
 
@@ -1562,7 +1562,7 @@ class LocalScope(Scope):
                 entry.in_closure = True
                 # Would it be better to declare_var here?
                 inner_entry = Entry(
-                    entry.name, entry.c_name,
+                    entry.name, entry.cname,
                     entry.type, entry.pos)
                 inner_entry.scope = self
                 inner_entry.is_variable = True
@@ -1575,18 +1575,18 @@ class LocalScope(Scope):
     def mangle_closure_cnames(self, outer_scope_cname):
         for entry in self.entries.values():
             if entry.from_closure:
-                cname = entry.outer_entry.c_name
+                cname = entry.outer_entry.cname
                 if self.is_passthrough:
-                    entry.c_name = cname
+                    entry.cname = cname
                 else:
                     if cname.startswith(Naming.cur_scope_cname):
                         cname = cname[len(Naming.cur_scope_cname)+2:]
-                    entry.c_name = "%s->%s" % (
+                    entry.cname = "%s->%s" % (
                         outer_scope_cname, cname)
             elif entry.in_closure:
-                entry.original_cname = entry.c_name
-                entry.c_name = "%s->%s" % (
-                    Naming.cur_scope_cname, entry.c_name)
+                entry.original_cname = entry.cname
+                entry.cname = "%s->%s" % (
+                    Naming.cur_scope_cname, entry.cname)
 
 class GeneratorExpressionScope(Scope):
     """Scope for generator expressions and comprehensions.  As opposed
@@ -1617,7 +1617,7 @@ class GeneratorExpressionScope(Scope):
                 type = outer_entry.type # may still be 'unspecified_type' !
         # the parent scope needs to generate code for the variable, but
         # this scope must hold its name exclusively
-        binding.c_name = '%s%s' % (self.genexp_prefix, self.parent_scope.mangle(
+        binding.cname = '%s%s' % (self.genexp_prefix, self.parent_scope.mangle(
                 Naming.var_prefix, binding.name))
         entry = self.WTK_declare(
             binding, type, pos = pos)
@@ -1668,10 +1668,10 @@ class StructOrUnionScope(Scope):
     def WTK_declare_var(self, binding, type,
                         is_cdef = 0, allow_pyobject = 0, pos = None):
         # Add an entry for an attribute.
-        if not binding.c_name:
-            binding.c_name = binding.name
+        if not binding.cname:
+            binding.cname = binding.name
             if binding.c_visibility == 'private':
-                binding.c_name = c_safe_identifier(binding.c_name)
+                binding.cname = c_safe_identifier(binding.cname)
         if type.is_cfunction:
             type = PyrexTypes.CPtrType(type)
         entry = self.WTK_declare(binding, type, pos)
@@ -1816,10 +1816,10 @@ class CClassScope(ClassScope):
                 error(pos,
                     "The name '%s' is reserved for a special method."
                         % binding.name)
-            if not binding.c_name:
-                binding.c_name = binding.name
+            if not binding.cname:
+                binding.cname = binding.name
                 if binding.c_visibility == 'private':
-                    binding.c_name = c_safe_identifier(binding.c_name)
+                    binding.cname = c_safe_identifier(binding.cname)
             if type.is_cpp_class and not binding.extern:
                 error(pos, "C++ classes not allowed as members of an extension type, use a pointer or reference instead")
             entry = self.WTK_declare(binding, type, pos)
@@ -1935,8 +1935,8 @@ class CClassScope(ClassScope):
                 error(pos,
                     "C method '%s' not previously declared in definition part of"
                     " extension type" % binding.name)
-            if not binding.c_name:
-                binding.c_name = binding.name
+            if not binding.cname:
+                binding.cname = binding.name
             entry = self.WTK_add_cfunction(binding, pos, type, modifiers)
         if defining:
             entry.func_cname = self.mangle(Naming.func_prefix, binding.name)
@@ -1966,13 +1966,13 @@ class CClassScope(ClassScope):
         # overridden methods of builtin types still have their Python
         # equivalent that must be accessible to support bound methods
         binding.name = EncodedString(binding.name)
-        #entry = self.declare_cfunction(binding.name, type, None, binding.c_name, visibility='extern',
+        #entry = self.declare_cfunction(binding.name, type, None, binding.cname, visibility='extern',
         #                               utility_code = utility_code)
         entry = self.WTK_declare_cfunction(
             binding, pos=None, type=type,
             utility_code = utility_code)  # WTK: need all declare_cfunction-s wrapped
         var_entry = WTK_Entry(
-            Binding(name=binding.name, c_name=binding.name), py_object_type)
+            Binding(name=binding.name, cname=binding.name), py_object_type)
         var_entry.is_variable = 1
         var_entry.is_builtin = 1
         var_entry.utility_code = utility_code
@@ -2002,12 +2002,12 @@ class CClassScope(ClassScope):
         # inherited type, with cnames modified appropriately
         # to work with this type.
         def adapt(cname):
-            return "%s.%s" % (Naming.obj_base_cname, base_entry.c_name)
+            return "%s.%s" % (Naming.obj_base_cname, base_entry.cname)
         for base_entry in \
             base_scope.inherited_var_entries + base_scope.var_entries:
                 entry = self.declare(
                     base_entry.name,
-                    adapt(base_entry.c_name),
+                    adapt(base_entry.cname),
                     base_entry.type, None, 'private')
                 entry.is_variable = 1
                 self.inherited_var_entries.append(entry)
@@ -2019,7 +2019,7 @@ class CClassScope(ClassScope):
                 visibility = base_entry.c_visibility
             entry = self.add_cfunction(
                 base_entry.name, base_entry.type,
-                base_entry.pos, adapt(base_entry.c_name),
+                base_entry.pos, adapt(base_entry.cname),
                 visibility, base_entry.func_modifiers)
             entry.is_inherited = 1
 
@@ -2045,8 +2045,8 @@ class CppClassScope(Scope):
     def WTK_declare_var(self, binding, type,
                         is_cdef = 0, allow_pyobject = 0, pos = None):
         # Add an entry for an attribute.
-        if not binding.c_name:
-            binding.c_name = binding.name
+        if not binding.cname:
+            binding.cname = binding.name
         if type.is_cfunction:
             type = PyrexTypes.CPtrType(type)
         entry = self.WTK_declare(binding, type, pos)
@@ -2096,7 +2096,7 @@ class CppClassScope(Scope):
     def WTK_declare_cfunction(
         self, binding, pos, type, defining = 0,
         in_pxd = 0, modifiers = (), utility_code = None):
-        if binding.name == self.name.split('::')[-1] and binding.c_name is None:
+        if binding.name == self.name.split('::')[-1] and binding.cname is None:
             self.check_base_default_constructor(pos)
             binding.name = '<init>'
             type.return_type = self.lookup(self.name).type
@@ -2120,7 +2120,7 @@ class CppClassScope(Scope):
                 if base_entry.name in self.entries:
                     base_entry.name
                 entry = self.declare(
-                    base_entry.name, base_entry.c_name,
+                    base_entry.name, base_entry.cname,
                     base_entry.type, None, 'extern')
                 entry.is_variable = 1
                 self.inherited_var_entries.append(entry)
@@ -2132,7 +2132,7 @@ class CppClassScope(Scope):
                 visibility = base_entry.c_visibility
             entry = self.declare_cfunction(
                 base_entry.name, base_entry.type,
-                base_entry.pos, base_entry.c_name,
+                base_entry.pos, base_entry.cname,
                 visibility, base_entry.func_modifiers,
                 utility_code = base_entry.utility_code)
             entry.is_inherited = 1
