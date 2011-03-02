@@ -191,8 +191,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 h_code.putln("")
                 for entry in api_funcs:
                     type = CPtrType(entry.type)
-                    h_code.putln("static %s;" % type.declaration_code(
-                            entry.cname))
+                    h_code.putln("static %s;" % type.declaration_code(entry.cname))
             h_code.putln("")
             h_code.put_h_guard(Naming.api_func_guard + "import_module")
             h_code.put(import_module_utility_code.impl)
@@ -247,8 +246,8 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         var_entries = type.scope.var_entries
         if var_entries:
             for entry in var_entries:
-                i_code.putln("cdef %s" % entry.type.declaration_code(
-                        entry.cname, pyrex = 1))
+                i_code.putln("cdef %s" %
+                    entry.type.declaration_code(entry.cname, pyrex = 1))
         else:
             i_code.putln("pass")
         i_code.dedent()
@@ -793,8 +792,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         else:
             writer = code
         writer.putln("")
-        writer.putln("typedef %s;" % base_type.declaration_code(
-                entry.cname))
+        writer.putln("typedef %s;" % base_type.declaration_code(entry.cname))
 
     def sue_header_footer(self, type, kind, name):
         if type.typedef_flag:
@@ -907,8 +905,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             for method_entry in scope.cfunc_entries:
                 if not method_entry.is_inherited:
                     code.putln(
-                        "%s;" % method_entry.type.declaration_code(
-                            "(*%s)" % method_entry.name))
+                        "%s;" % method_entry.type.declaration_code("(*%s)" % method_entry.name))
             code.putln(
                 "};")
 
@@ -968,8 +965,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         for entry in env.cfunc_entries:
             if entry.inline_func_in_pxd or (not entry.in_cinclude and (definition
                     or entry.defined_in_pxd or entry.extern)):
-                if (entry.extern or
-                    entry.c_visibility == 'public'):
+                if entry.extern or entry.c_visibility == 'public':
                     dll_linkage = "DL_EXPORT"
                 else:
                     dll_linkage = None
@@ -980,8 +976,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                     dll_linkage = dll_linkage)
                 if entry.c_visibility == 'private':
                     storage_class = "static "
-                elif (entry.c_visibility == 'public' and
-                      not entry.extern):
+                elif (entry.c_visibility == 'public' and not entry.extern):
                     storage_class = ""
                 else:
                     storage_class = "%s " % Naming.extern_c_macro
@@ -1139,8 +1134,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         if weakref_slot in scope.var_entries:
             code.putln("if (p->__weakref__) PyObject_ClearWeakRefs(o);")
         for entry in py_attrs:
-            code.put_xdecref(
-                "p->%s" % entry.cname, entry.type, nanny=False)
+            code.put_xdecref("p->%s" % entry.cname, entry.type, nanny=False)
         if base_type:
             tp_dealloc = TypeSlots.get_base_slot_function(scope, tp_slot)
             if tp_dealloc is None:
@@ -1188,8 +1182,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 % slot_func)
         py_attrs = []
         for entry in scope.var_entries:
-            if (entry.type.is_pyobject and
-                entry.name != "__weakref__"):
+            if entry.type.is_pyobject and entry.name != "__weakref__":
                 py_attrs.append(entry)
         if base_type or py_attrs:
             code.putln("int e;")
@@ -1233,8 +1226,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         code.putln("static int %s(PyObject *o) {" % slot_func)
         py_attrs = []
         for entry in scope.var_entries:
-            if (entry.type.is_pyobject and
-                entry.name != "__weakref__"):
+            if entry.type.is_pyobject and entry.name != "__weakref__":
                 py_attrs.append(entry)
         if py_attrs:
             self.generate_self_cast(scope, code)
@@ -1708,8 +1700,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                             entry.type.type_test_code("o"),
                             code.error_goto(entry.pos)))
                     code.putln("Py_INCREF(o);")
-                    code.put_decref(
-                        entry.cname, entry.type, nanny=False)
+                    code.put_decref(entry.cname, entry.type, nanny=False)
                     code.putln("%s = %s;" % (
                         entry.cname,
                         PyrexTypes.typecast(entry.type, py_object_type, "o")))
@@ -1875,8 +1866,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 if not entry.extern:
                     if entry.type.is_pyobject and entry.used:
                         code.putln("Py_DECREF(%s); %s = 0;" % (
-                            code.entry_as_pyobject(entry),
-                            entry.cname))
+                            code.entry_as_pyobject(entry), entry.cname))
         code.putln("__Pyx_CleanupGlobals();")
         if Options.generate_cleanup_code >= 3:
             code.putln("/*--- Type import cleanup code ---*/")

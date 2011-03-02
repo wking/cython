@@ -1907,8 +1907,7 @@ class CFuncType(CType):
                              templates = new_templates)
     
     def opt_arg_cname(self, arg_name):
-        return self.op_arg_struct.base_type.scope.lookup(
-            arg_name).cname
+        return self.op_arg_struct.base_type.scope.lookup(arg_name).cname
 
 
 class CFuncTypeArg(object):
@@ -1961,8 +1960,7 @@ class StructUtilityCode(object):
         code.putln("PyObject* member;")
         code.putln("res = PyDict_New(); if (res == NULL) return NULL;")
         for member in self.type.scope.var_entries:
-            nameconst_cname = code.get_py_string_const(
-                member.name, identifier=True)
+            nameconst_cname = code.get_py_string_const(member.name, identifier=True)
             code.putln("member = %s(s.%s); if (member == NULL) goto bad;" % (
                 member.type.to_py_function, member.cname))
             code.putln("if (PyDict_SetItem(res, %s, member) < 0) goto bad;" % nameconst_cname)

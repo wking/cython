@@ -1335,8 +1335,7 @@ class NameNode(AtomicExprNode):
                 var_entry = entry.as_variable
                 if var_entry:
                     if var_entry.is_builtin and Options.cache_builtins:
-                        var_entry = env.declare_builtin(
-                            var_entry.name, self.pos)
+                        var_entry = env.declare_builtin(var_entry.name, self.pos)
                     node = NameNode(self.pos, name = self.name)
                     node.entry = var_entry
                     node.analyse_rvalue_entry(env)
@@ -1523,8 +1522,7 @@ class NameNode(AtomicExprNode):
             return # Lookup already cached
         elif entry.is_pyclass_attr:
             assert entry.type.is_pyobject, "Python global or builtin not a Python object"
-            interned_cname = code.intern_identifier(
-                self.entry.name)
+            interned_cname = code.intern_identifier(self.entry.name)
             if entry.is_builtin:
                 namespace = Naming.builtins_cname
             else: # entry.is_pyglobal
@@ -1539,8 +1537,7 @@ class NameNode(AtomicExprNode):
 
         elif entry.is_pyglobal or entry.is_builtin:
             assert entry.type.is_pyobject, "Python global or builtin not a Python object"
-            interned_cname = code.intern_identifier(
-                self.entry.name)
+            interned_cname = code.intern_identifier(self.entry.name)
             if entry.is_builtin:
                 namespace = Naming.builtins_cname
             else: # entry.is_pyglobal
@@ -1556,20 +1553,13 @@ class NameNode(AtomicExprNode):
 
         elif entry.is_local and False:
             # control flow not good enough yet
-            assigned = entry.scope.control_flow.get_state(
-                (entry.name, 'initialized'), self.pos)
+            assigned = entry.scope.control_flow.get_state((entry.name, 'initialized'), self.pos)
             if assigned is False:
-                error(
-                    self.pos,
-                    "local variable '%s' referenced before assignment" %
-                    entry.name)
+                error(self.pos, "local variable '%s' referenced before assignment" % entry.name)
             elif not Options.init_local_none and assigned is None:
-                code.putln(
-                    'if (%s == 0) { PyErr_SetString(PyExc_UnboundLocalError, "%s"); %s }' %
-                    (entry.cname, entry.name,
-                     code.error_goto(self.pos)))
-                entry.scope.control_flow.set_state(
-                    self.pos, (entry.name, 'initialized'), True)
+                code.putln('if (%s == 0) { PyErr_SetString(PyExc_UnboundLocalError, "%s"); %s }' %
+                           (entry.cname, entry.name, code.error_goto(self.pos)))
+                entry.scope.control_flow.set_state(self.pos, (entry.name, 'initialized'), True)
 
     def generate_assignment_code(self, rhs, code):
         #print "NameNode.generate_assignment_code:", self.name ###
@@ -1585,8 +1575,7 @@ class NameNode(AtomicExprNode):
         # We use this to access class->tp_dict if necessary.
         if entry.is_pyglobal:
             assert entry.type.is_pyobject, "Python global or builtin not a Python object"
-            interned_cname = code.intern_identifier(
-                self.entry.name)
+            interned_cname = code.intern_identifier(self.entry.name)
             namespace = self.entry.scope.namespace_cname
             if entry.is_member:
                 # if the entry is a member we have to cheat: SetAttr does not work
@@ -1642,9 +1631,7 @@ class NameNode(AtomicExprNode):
                         code.put_gotref(self.py_result())
                     if not self.lhs_of_first_assignment:
                         if entry.is_local and not Options.init_local_none:
-                            initialized = entry.scope.control_flow.get_state(
-                                (entry.name, 'initialized'),
-                                self.pos)
+                            initialized = entry.scope.control_flow.get_state((entry.name, 'initialized'), self.pos)
                             if initialized is True:
                                 code.put_decref(self.result(), self.ctype())
                             elif initialized is None:
@@ -2789,10 +2776,7 @@ class CallNode(ExprNode):
             args, kwds = self.explicit_args_kwds()
             items = []
             for arg, member in zip(args, type.scope.var_entries):
-                items.append(DictItemNode(
-                        pos=arg.pos, key=StringNode(
-                            pos=arg.pos, value=member.name),
-                        value=arg))
+                items.append(DictItemNode(pos=arg.pos, key=StringNode(pos=arg.pos, value=member.name), value=arg))
             if kwds:
                 items += kwds.key_value_pairs
             self.key_value_pairs = items
@@ -2875,8 +2859,7 @@ class SimpleCallNode(CallNode):
                 elif result_type.is_builtin_type:
                     if function.entry.name == 'float':
                         return PyrexTypes.c_double_type
-                    elif (function.entry.name
-                          in Builtin.types_that_construct_their_instance):
+                    elif function.entry.name in Builtin.types_that_construct_their_instance:
                         return result_type
         return py_object_type
 
@@ -2914,19 +2897,17 @@ class SimpleCallNode(CallNode):
             self.arg_tuple = TupleNode(self.pos, args = self.args)
             self.arg_tuple.analyse_types(env)
             self.args = None
-            if (func_type is Builtin.type_type and function.is_name and
-                function.entry and
-                function.entry.is_builtin and
-                (function.entry.name
-                 in Builtin.types_that_construct_their_instance)):
+            if func_type is Builtin.type_type and function.is_name and \
+                   function.entry and \
+                   function.entry.is_builtin and \
+                   function.entry.name in Builtin.types_that_construct_their_instance:
                 # calling a builtin type that returns a specific object type
                 if function.entry.name == 'float':
                     # the following will come true later on in a transform
                     self.type = PyrexTypes.c_double_type
                     self.result_ctype = PyrexTypes.c_double_type
                 else:
-                    self.type = Builtin.builtin_types[
-                        function.entry.name]
+                    self.type = Builtin.builtin_types[function.entry.name]
                     self.result_ctype = py_object_type
                 self.may_return_none = False
             elif function.is_name and function.type_entry:
@@ -2947,8 +2928,7 @@ class SimpleCallNode(CallNode):
                 self_arg = func_type.args[0]
                 if self_arg.not_none: # C methods must do the None test for self at *call* time
                     self.self = self.self.as_none_safe_node(
-                        "'NoneType' object has no attribute '%s'" %
-                        self.function.entry.name,
+                        "'NoneType' object has no attribute '%s'" % self.function.entry.name,
                         'PyExc_AttributeError')
                 expected_type = self_arg.type
                 self.coerced_self = CloneNode(self.self).coerce_to(
@@ -3182,8 +3162,7 @@ class SimpleCallNode(CallNode):
                             func_type.exception_value.entry.cname,
                             func_type.exception_value.entry.cname)
                     else:
-                        raise_py_exception = '%s(); if (!PyErr_Occurred()) PyErr_SetString(PyExc_RuntimeError , "Error converting c++ exception.")' % (
-                            func_type.exception_value.entry.cname)
+                        raise_py_exception = '%s(); if (!PyErr_Occurred()) PyErr_SetString(PyExc_RuntimeError , "Error converting c++ exception.")' % func_type.exception_value.entry.cname
                     if self.nogil:
                         raise_py_exception = 'Py_BLOCK_THREADS; %s; Py_UNBLOCK_THREADS' % raise_py_exception
                     code.putln(
@@ -3605,8 +3584,7 @@ class AttributeNode(ExprNode):
                 return
             self.entry = entry
             if entry:
-                if (obj_type.is_extension_type and
-                    entry.name == "__weakref__"):
+                if obj_type.is_extension_type and entry.name == "__weakref__":
                     error(self.pos, "Illegal use of special attribute __weakref__")
                 # methods need the normal attribute lookup
                 # because they do not have struct entries

@@ -355,6 +355,7 @@ class StringConst(object):
                 prefix,
                 (is_str and 's') or (is_unicode and 'u') or 'b',
                 self.cname[len(Naming.const_prefix):])
+
             py_string = PyStringConst(
                 pystring_cname, encoding, is_unicode, is_str, intern)
             self.py_strings[key] = py_string
@@ -657,8 +658,7 @@ class GlobalState(object):
                         entry.cname)
                     w.putln('#else')
                 self.put_cached_builtin_init(
-                    entry.pos,
-                    StringEncoding.EncodedString(entry.name),
+                    entry.pos, StringEncoding.EncodedString(entry.name),
                     entry.cname)
                 if entry.name == 'xrange':
                     w.putln('#endif')
@@ -1129,8 +1129,7 @@ class CCodeWriter(object):
                 storage_class = "static"
         if storage_class:
             self.put("%s " % storage_class)
-        if (entry.extern or
-            entry.c_visibility != 'public'):
+        if (entry.extern or entry.c_visibility != 'public'):
             dll_linkage = None
         self.put(entry.type.declaration_code(entry.cname,
             dll_linkage = dll_linkage))
@@ -1290,12 +1289,8 @@ class CCodeWriter(object):
 
     def put_pymethoddef(self, entry, term, allow_skip=True):
         if entry.is_special or entry.name == '__getattribute__':
-            if entry.name not in [
-                '__cinit__', '__dealloc__', '__richcmp__', '__next__',
-                '__getreadbuffer__', '__getwritebuffer__', '__getsegcount__',
-                '__getcharbuffer__', '__getbuffer__', '__releasebuffer__']:
-                if (entry.name == '__getattr__' and
-                    not self.globalstate.directives['fast_getattr']):
+            if entry.name not in ['__cinit__', '__dealloc__', '__richcmp__', '__next__', '__getreadbuffer__', '__getwritebuffer__', '__getsegcount__', '__getcharbuffer__', '__getbuffer__', '__releasebuffer__']:
+                if entry.name == '__getattr__' and not self.globalstate.directives['fast_getattr']:
                     pass
                 # Python's typeobject.c will automatically fill in our slot
                 # in add_operators() (called by PyType_Ready) with a value

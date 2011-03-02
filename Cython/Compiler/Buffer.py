@@ -236,8 +236,7 @@ def put_unpack_buffer_aux_into_scope(buffer_aux, mode, code):
 def put_acquire_arg_buffer(entry, code, pos):
     code.globalstate.use_utility_code(acquire_utility_code)
     buffer_aux = entry.buffer_aux
-    getbuffer = get_getbuffer_call(
-        code, entry.cname, buffer_aux, entry.type)
+    getbuffer = get_getbuffer_call(code, entry.cname, buffer_aux, entry.type)
 
     # Acquire any new buffer
     code.putln("{")
@@ -250,8 +249,7 @@ def put_acquire_arg_buffer(entry, code, pos):
 
 def put_release_buffer_code(code, entry):
     code.globalstate.use_utility_code(acquire_utility_code)
-    code.putln("__Pyx_SafeReleaseBuffer(&%s);" %
-               entry.buffer_aux.buffer_info_var.cname)
+    code.putln("__Pyx_SafeReleaseBuffer(&%s);" % entry.buffer_aux.buffer_info_var.cname)
 
 def get_getbuffer_call(code, obj_cname, buffer_aux, buffer_type):
     ndim = buffer_type.ndim
@@ -377,8 +375,7 @@ def put_buffer_lookup_code(entry, index_signeds, index_cnames, directives, pos, 
             else:
                 cast = "(size_t)"
             code.putln("if (%s) %s = %d;" % (
-                code.unlikely("%s >= %s%s" % (
-                            cname, cast, shape.cname)),
+                code.unlikely("%s >= %s%s" % (cname, cast, shape.cname)),
                 tmp_cname, dim))
         code.globalstate.use_utility_code(raise_indexerror_code)
         code.putln("if (%s) {" % code.unlikely("%s != -1" % tmp_cname))
@@ -391,8 +388,7 @@ def put_buffer_lookup_code(entry, index_signeds, index_cnames, directives, pos, 
         for signed, cname, shape in zip(index_signeds, index_cnames,
                                         bufaux.shapevars):
             if signed != 0:
-                code.putln("if (%s < 0) %s += %s;" % (
-                        cname, cname, shape.cname))
+                code.putln("if (%s < 0) %s += %s;" % (cname, cname, shape.cname))
 
     # Create buffer lookup and return it
     # This is done via utility macros/inline functions, which vary
@@ -520,10 +516,8 @@ def use_py2_buffer_functions(env):
             if t.is_extension_type:
                 release = get = None
                 for x in t.scope.pyfunc_entries:
-                    if x.name == u"__getbuffer__":
-                        get = x.func_cname
-                    elif x.name == u"__releasebuffer__":
-                        release = x.func_cname
+                    if x.name == u"__getbuffer__": get = x.func_cname
+                    elif x.name == u"__releasebuffer__": release = x.func_cname
                 if get:
                     types.append((t.typeptr_cname, get, release))
 
@@ -635,9 +629,7 @@ def get_type_information_cname(code, dtype, maxdepth=None):
             typecode.putln("static __Pyx_StructField %s[] = {" % structinfo_name, safe=True)
             for f, typeinfo in zip(fields, types):
                 typecode.putln('  {&%s, "%s", offsetof(%s, %s)},' %
-                           (typeinfo, f.name,
-                            dtype.declaration_code(""), f.cname),
-                               safe=True)
+                           (typeinfo, f.name, dtype.declaration_code(""), f.cname), safe=True)
             typecode.putln('  {NULL, NULL, 0}', safe=True)
             typecode.putln("};", safe=True)
         else:

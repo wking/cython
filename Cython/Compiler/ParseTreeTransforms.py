@@ -1148,10 +1148,9 @@ property NAME:
         else:
             raise NotImplementedError('private python methods')
         property = template.substitute({
-                u"ATTR": ExprNodes.AttributeNode(
-                    pos=entry.pos,
-                    obj=ExprNodes.NameNode(pos=entry.pos, name="self"),
-                    attribute=entry.name),
+                u"ATTR": ExprNodes.AttributeNode(pos=entry.pos,
+                                                 obj=ExprNodes.NameNode(pos=entry.pos, name="self"),
+                                                 attribute=entry.name),
             }, pos=entry.pos).stats[0]
         property.name = entry.name
         # ---------------------------------------
@@ -1392,9 +1391,7 @@ class CreateClosureClasses(CythonTransform):
             node.needs_outer_scope = True
             return
 
-        as_name = '%s_%s' % (
-            target_module_scope.next_id(Naming.closure_class_prefix),
-            node.entry.cname)
+        as_name = '%s_%s' % (target_module_scope.next_id(Naming.closure_class_prefix), node.entry.cname)
 
         entry = target_module_scope.declare_c_class(name = as_name,
             pos = node.pos, defining = True, implementing = True)
@@ -1653,7 +1650,8 @@ class DebugTransform(CythonTransform):
             self.nested_funcdefs.append(node)
             return node
 
-        # node.entry.extern
+        # node.entry.extern = 1
+        # node.entry.c_visibility = 'public'
         if node.py_func is None:
             pf_cname = ''
         else:
