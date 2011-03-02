@@ -2659,22 +2659,23 @@ def p_visibility(s, ctx):
     _LOG.debug('p_visibility(s=<s sy:%s systring:%s>)'
                % (s.sy, s.systring))
     pos = s.position()
-    prev_visibility = 'private'
-    if ctx.extern:
-        prev_visibility = 'extern'
-    elif ctx.c_visibility != 'private':
-        prev_visibility = ctx.c_visibility
-    visibility = prev_visibility
     if s.sy == 'IDENT' and s.systring in ('extern', 'public', 'readonly'):
         visibility = s.systring
-        if prev_visibility != 'private' and visibility != prev_visibility:
-            s.error("Conflicting visibility options '%s' and '%s'"
-                % (prev_visibility, visibility))
+        outer_scope = ctx.level in ('module', 'module_pxd')
+        if visibility == 'extern':
+            #if prev_visibility != 'private' and visibility != prev_visibility:
+            #    s.error("Conflicting visibility options '%s' and '%s'"
+            #            % (prev_visibility, visibility))
+            ctx.extern = 1
+            ctx.c_visibility = 'public'
+            # Need to restore/set default value for Python visibility?
+        elif outer_scope and visibility not in ('readonly',):
+            ctx.c_visibility = visibility
+        else:
+            ctx.visibility = visibility
+            if ctx.visibility != 'private':
+                ctx.c_visibility = 'public'
         s.next()
-    if visibility == 'extern':
-        ctx.extern = 1
-    else:
-        ctx.c_visibility = visibility
     return ctx
 
 def p_c_modifiers(s):
@@ -2752,13 +2753,10 @@ def p_c_func_or_var_declaration(s, pos, ctx, decorators=None):
                                         assignable = 1, nonempty = 1)
             declarators.append(declarator)
         s.expect_newline("Syntax error in C variable declaration")
-        visibility = 'private'
-        if ctx.extern:
-            visibility = 'extern'
-        elif ctx.c_visibility != 'private':
-            visibility = ctx.c_visibility
         result = Nodes.CVarDefNode(pos,
-            visibility = visibility,
+            extern = ctx.extern,
+            c_visibility = ctx.c_visibility,
+            visibility = ctx.visibility,
             api = ctx.api,
             overridable = ctx.overridable,
             base_type = base_type,
@@ -2935,7 +2933,11 @@ def p_c_class_definition(s, pos,  ctx, decorators=None):
             body_level = 'c_class_pxd'
         else:
             body_level = 'c_class'
-        doc, body = p_suite(s, Ctx(level = body_level), with_doc = 1)
+        body_ctx = Ctx(
+            level = body_level,
+            visibility = 'private',
+            c_visibility = 'private')
+        doc, body = p_suite(s, body_ctx, with_doc = 1)
     else:
         s.expect_newline("Syntax error in C class definition")
         doc = None

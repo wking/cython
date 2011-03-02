@@ -15,6 +15,7 @@ cython.declare(sys=object, os=object, time=object, copy=object,
 import sys, os, time, copy
 
 import Builtin
+from Binding import Binding
 from Errors import error, warning, InternalError
 import Naming
 import PyrexTypes
@@ -907,11 +908,13 @@ class CComplexBaseTypeNode(CBaseTypeNode):
 class CVarDefNode(StatNode):
     #  C variable definition or forward/extern function declaration.
     #
-    #  visibility    'private' or 'public' or 'extern'
+    #  extern        (same as Binding.extern)
+    #  c_visibility  (same as Binding.c_visibility)
+    #  visibility    (same as Binding.visibility)
     #  base_type     CBaseTypeNode
     #  declarators   [CDeclaratorNode]
     #  in_pxd        boolean
-    #  api           boolean
+    #  api           (same as Binding.api)
 
     #  decorators    [cython.locals(...)] or None
     #  directive_locals { string : NameNode } locals defined by cython.locals(...)
@@ -930,20 +933,18 @@ class CVarDefNode(StatNode):
         # If the field is an external typedef, we cannot be sure about the type,
         # so do conversion ourself rather than rely on the CPython mechanism (through
         # a property; made in AnalyseDeclarationsTransform).
-        if (dest_scope.is_c_class_scope
-            and self.visibility in ('public', 'readonly')):
+        if dest_scope.is_c_class_scope and self.c_visibility == 'public':
             need_property = True
         else:
             need_property = False
-        visibility = self.visibility
 
         for declarator in self.declarators:
             name_declarator, type = declarator.analyse(base_type, env)
             if not type.is_complete():
-                if not (self.visibility == 'extern' and type.is_array):
+                if not (self.extern and type.is_array):
                     error(declarator.pos,
                         "Variable type '%s' is incomplete" % type)
-            if self.visibility == 'extern' and type.is_pyobject:
+            if self.extern and type.is_pyobject:
                 error(declarator.pos,
                     "Python object cannot be declared extern")
             name = name_declarator.name
@@ -951,20 +952,22 @@ class CVarDefNode(StatNode):
             if name == '':
                 error(declarator.pos, "Missing name in declaration.")
                 return
+            binding = Binding(name=name, cname=cname)
+            binding.pull(self)
             if type.is_cfunction:
-                entry = dest_scope.declare_cfunction(name, type, declarator.pos,
-                    cname = cname, visibility = self.visibility, in_pxd = self.in_pxd,
-                    api = self.api)
+                entry = dest_scope.WTK_declare_cfunction(
+                    binding, type = type, pos = declarator.pos,
+                    in_pxd = self.in_pxd)
                 if entry is not None:
                     entry.directive_locals = self.directive_locals
             else:
                 if self.directive_locals:
                     error(self.pos, "Decorators can only be followed by functions")
-                if self.in_pxd and self.visibility != 'extern':
+                if self.in_pxd and not self.extern:
                     error(self.pos,
                         "Only 'extern' C variable declaration allowed in .pxd file")
-                entry = dest_scope.declare_var(name, type, declarator.pos,
-                            cname = cname, visibility = visibility, is_cdef = 1)
+                entry = dest_scope.WTK_declare_var(
+                    binding, type = type, is_cdef = 1, pos = declarator.pos)
                 entry.needs_property = need_property
 
 
