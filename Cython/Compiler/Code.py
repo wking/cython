@@ -557,7 +557,7 @@ class GlobalState(object):
             w.exit_cfunc_scope()
 
     def put_pyobject_decl(self, entry):
-        self['global_var'].putln("static PyObject *%s;" % entry.c_binding.name)
+        self['global_var'].putln("static PyObject *%s;" % entry.c_name)
 
     # constant handling at code generation time
 
@@ -646,21 +646,21 @@ class GlobalState(object):
 
     def add_cached_builtin_decl(self, entry):
         if Options.cache_builtins:
-            if self.should_declare(entry.c_binding.name, entry):
+            if self.should_declare(entry.c_name, entry):
                 self.put_pyobject_decl(entry)
                 w = self.parts['cached_builtins']
-                if entry.python_binding.name == 'xrange':
+                if entry.name == 'xrange':
                     # replaced by range() in Py3
                     w.putln('#if PY_MAJOR_VERSION >= 3')
                     self.put_cached_builtin_init(
                         entry.pos, StringEncoding.EncodedString('range'),
-                        entry.c_binding.name)
+                        entry.c_name)
                     w.putln('#else')
                 self.put_cached_builtin_init(
                     entry.pos,
-                    StringEncoding.EncodedString(entry.python_binding.name),
-                    entry.c_binding.name)
-                if entry.python_binding.name == 'xrange':
+                    StringEncoding.EncodedString(entry.name),
+                    entry.c_name)
+                if entry.name == 'xrange':
                     w.putln('#endif')
 
     def put_cached_builtin_init(self, pos, name, cname):
@@ -1109,30 +1109,30 @@ class CCodeWriter(object):
 
     def put_var_declaration(self, entry, static = 0, dll_linkage = None,
             definition = True):
-        #print "Code.put_var_declaration:", entry.python_binding.name, "definition =", definition ###
+        #print "Code.put_var_declaration:", entry.name, "definition =", definition ###
         if entry.in_closure:
             return
-        if entry.c_binding.visibility == 'private' and not definition:
+        if entry.c_visibility == 'private' and not definition:
             #print "...private and not definition, skipping" ###
             return
-        if entry.c_binding.visibility == 'private' and not entry.used:
-            #print "not used and private, skipping", entry.c_binding.name ###
+        if entry.c_visibility == 'private' and not entry.used:
+            #print "not used and private, skipping", entry.c_name ###
             return
         storage_class = ""
-        if entry.c_source.extern:
+        if entry.extern:
             storage_class = Naming.extern_c_macro
-        elif entry.c_binding.visibility == 'public':
+        elif entry.c_visibility == 'public':
             if not definition:
                 storage_class = Naming.extern_c_macro
-        elif entry.c_binding.visibility == 'private':
+        elif entry.c_visibility == 'private':
             if static:
                 storage_class = "static"
         if storage_class:
             self.put("%s " % storage_class)
-        if (entry.c_source.extern or
-            entry.c_binding.visibility != 'public'):
+        if (entry.extern or
+            entry.c_visibility != 'public'):
             dll_linkage = None
-        self.put(entry.type.declaration_code(entry.c_binding.name,
+        self.put(entry.type.declaration_code(entry.c_name,
             dll_linkage = dll_linkage))
         if entry.init is not None:
             self.put_safe(" = %s" % entry.type.literal_code(entry.init))
@@ -1162,9 +1162,9 @@ class CCodeWriter(object):
         type = entry.type
         if (not entry.is_self_arg and not entry.type.is_complete()
             or entry.type.is_extension_type):
-            return "(PyObject *)" + entry.c_binding.name
+            return "(PyObject *)" + entry.c_name
         else:
-            return entry.c_binding.name
+            return entry.c_name
 
     def as_pyobject(self, cname, type):
         from PyrexTypes import py_object_type, typecast
@@ -1247,7 +1247,7 @@ class CCodeWriter(object):
     def put_var_decref_clear(self, entry):
         if entry.type.is_pyobject:
             self.putln("__Pyx_DECREF(%s); %s = 0;" % (
-                self.entry_as_pyobject(entry), entry.c_binding.name))
+                self.entry_as_pyobject(entry), entry.c_name))
 
     def put_var_xdecref(self, entry):
         if entry.type.is_pyobject:
@@ -1256,7 +1256,7 @@ class CCodeWriter(object):
     def put_var_xdecref_clear(self, entry):
         if entry.type.is_pyobject:
             self.putln("__Pyx_XDECREF(%s); %s = 0;" % (
-                self.entry_as_pyobject(entry), entry.c_binding.name))
+                self.entry_as_pyobject(entry), entry.c_name))
 
     def put_var_decrefs(self, entries, used_only = 0):
         for entry in entries:
@@ -1283,18 +1283,18 @@ class CCodeWriter(object):
             self.putln("%s = %s; Py_INCREF(Py_None);" % (cname, py_none))
 
     def put_init_var_to_py_none(self, entry, template = "%s", nanny=True):
-        code = template % entry.c_binding.name
+        code = template % entry.c_name
         #if entry.type.is_extension_type:
         #    code = "((PyObject*)%s)" % code
         self.put_init_to_py_none(code, entry.type, nanny)
 
     def put_pymethoddef(self, entry, term, allow_skip=True):
-        if entry.is_special or entry.python_binding.name == '__getattribute__':
-            if entry.python_binding.name not in [
+        if entry.is_special or entry.name == '__getattribute__':
+            if entry.name not in [
                 '__cinit__', '__dealloc__', '__richcmp__', '__next__',
                 '__getreadbuffer__', '__getwritebuffer__', '__getsegcount__',
                 '__getcharbuffer__', '__getbuffer__', '__releasebuffer__']:
-                if (entry.python_binding.name == '__getattr__' and
+                if (entry.name == '__getattr__' and
                     not self.globalstate.directives['fast_getattr']):
                     pass
                 # Python's typeobject.c will automatically fill in our slot
@@ -1313,7 +1313,7 @@ class CCodeWriter(object):
                 method_flags += [method_coexist]
             self.putln(
                 '{__Pyx_NAMESTR("%s"), (PyCFunction)%s, %s, __Pyx_DOCSTR(%s)}%s' % (
-                    entry.python_binding.name,
+                    entry.name,
                     entry.func_cname,
                     "|".join(method_flags),
                     doc_code,

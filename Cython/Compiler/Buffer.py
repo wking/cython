@@ -63,7 +63,7 @@ class IntroduceBufferAuxiliaryVars(CythonTransform):
             if entry.type.dtype.is_ptr:
                 raise CompileError(node.pos, "Buffers with pointer types not yet supported.")
 
-            name = entry.python_binding.name
+            name = entry.name
             buftype = entry.type
             if buftype.ndim > self.max_ndim:
                 self.max_ndim = buftype.ndim
@@ -221,7 +221,7 @@ def used_buffer_aux_vars(entry):
 def put_unpack_buffer_aux_into_scope(buffer_aux, mode, code):
     # Generate code to copy the needed struct info into local
     # variables.
-    bufstruct = buffer_aux.buffer_info_var.c_binding.name
+    bufstruct = buffer_aux.buffer_info_var.c_name
 
     varspec = [("strides", buffer_aux.stridevars),
                ("shape", buffer_aux.shapevars)]
@@ -230,14 +230,14 @@ def put_unpack_buffer_aux_into_scope(buffer_aux, mode, code):
 
     for field, vars in varspec:
         code.putln(" ".join(["%s = %s.%s[%d];" %
-                             (s.c_binding.name, bufstruct, field, idx)
+                             (s.c_name, bufstruct, field, idx)
                              for idx, s in enumerate(vars)]))
 
 def put_acquire_arg_buffer(entry, code, pos):
     code.globalstate.use_utility_code(acquire_utility_code)
     buffer_aux = entry.buffer_aux
     getbuffer = get_getbuffer_call(
-        code, entry.c_binding.name, buffer_aux, entry.type)
+        code, entry.c_name, buffer_aux, entry.type)
 
     # Acquire any new buffer
     code.putln("{")
@@ -251,13 +251,13 @@ def put_acquire_arg_buffer(entry, code, pos):
 def put_release_buffer_code(code, entry):
     code.globalstate.use_utility_code(acquire_utility_code)
     code.putln("__Pyx_SafeReleaseBuffer(&%s);" %
-               entry.buffer_aux.buffer_info_var.c_binding.name)
+               entry.buffer_aux.buffer_info_var.c_name)
 
 def get_getbuffer_call(code, obj_cname, buffer_aux, buffer_type):
     ndim = buffer_type.ndim
     cast = int(buffer_type.cast)
     flags = get_flags(buffer_aux, buffer_type)
-    bufstruct = buffer_aux.buffer_info_var.c_binding.name
+    bufstruct = buffer_aux.buffer_info_var.c_name
 
     dtype_typeinfo = get_type_information_cname(code, buffer_type.dtype)
 
@@ -282,7 +282,7 @@ def put_assign_to_buffer(lhs_cname, rhs_cname, buffer_aux, buffer_type,
     """
 
     code.globalstate.use_utility_code(acquire_utility_code)
-    bufstruct = buffer_aux.buffer_info_var.c_binding.name
+    bufstruct = buffer_aux.buffer_info_var.c_name
     flags = get_flags(buffer_aux, buffer_type)
 
     code.putln("{")  # Set up necesarry stack for getbuffer
@@ -349,7 +349,7 @@ def put_buffer_lookup_code(entry, index_signeds, index_cnames, directives, pos, 
 
     """
     bufaux = entry.buffer_aux
-    bufstruct = bufaux.buffer_info_var.c_binding.name
+    bufstruct = bufaux.buffer_info_var.c_name
     negative_indices = directives['wraparound'] and entry.type.negative_indices
 
     if directives['boundscheck']:
@@ -365,7 +365,7 @@ def put_buffer_lookup_code(entry, index_signeds, index_cnames, directives, pos, 
                 # not unsigned, deal with negative index
                 code.putln("if (%s < 0) {" % cname)
                 if negative_indices:
-                    code.putln("%s += %s;" % (cname, shape.c_binding.name))
+                    code.putln("%s += %s;" % (cname, shape.c_name))
                     code.putln("if (%s) %s = %d;" % (
                         code.unlikely("%s < 0" % cname), tmp_cname, dim))
                 else:
@@ -378,7 +378,7 @@ def put_buffer_lookup_code(entry, index_signeds, index_cnames, directives, pos, 
                 cast = "(size_t)"
             code.putln("if (%s) %s = %d;" % (
                 code.unlikely("%s >= %s%s" % (
-                            cname, cast, shape.c_binding.name)),
+                            cname, cast, shape.c_name)),
                 tmp_cname, dim))
         code.globalstate.use_utility_code(raise_indexerror_code)
         code.putln("if (%s) {" % code.unlikely("%s != -1" % tmp_cname))
@@ -392,7 +392,7 @@ def put_buffer_lookup_code(entry, index_signeds, index_cnames, directives, pos, 
                                         bufaux.shapevars):
             if signed != 0:
                 code.putln("if (%s < 0) %s += %s;" % (
-                        cname, cname, shape.c_binding.name))
+                        cname, cname, shape.c_name))
 
     # Create buffer lookup and return it
     # This is done via utility macros/inline functions, which vary
@@ -403,8 +403,8 @@ def put_buffer_lookup_code(entry, index_signeds, index_cnames, directives, pos, 
     if mode == 'full':
         for i, s, o in zip(index_cnames, bufaux.stridevars, bufaux.suboffsetvars):
             params.append(i)
-            params.append(s.c_binding.name)
-            params.append(o.c_binding.name)
+            params.append(s.c_name)
+            params.append(o.c_name)
         funcname = "__Pyx_BufPtrFull%dd" % nd
         funcgen = buf_lookup_full_code
     else:
@@ -421,7 +421,7 @@ def put_buffer_lookup_code(entry, index_signeds, index_cnames, directives, pos, 
             assert False
         for i, s in zip(index_cnames, bufaux.stridevars):
             params.append(i)
-            params.append(s.c_binding.name)
+            params.append(s.c_name)
 
     # Make sure the utility code is available
     if funcname not in code.globalstate.utility_codes:
@@ -520,9 +520,9 @@ def use_py2_buffer_functions(env):
             if t.is_extension_type:
                 release = get = None
                 for x in t.scope.pyfunc_entries:
-                    if x.python_binding.name == u"__getbuffer__":
+                    if x.name == u"__getbuffer__":
                         get = x.func_cname
-                    elif x.python_binding.name == u"__releasebuffer__":
+                    elif x.name == u"__releasebuffer__":
                         release = x.func_cname
                 if get:
                     types.append((t.typeptr_cname, get, release))
@@ -635,8 +635,8 @@ def get_type_information_cname(code, dtype, maxdepth=None):
             typecode.putln("static __Pyx_StructField %s[] = {" % structinfo_name, safe=True)
             for f, typeinfo in zip(fields, types):
                 typecode.putln('  {&%s, "%s", offsetof(%s, %s)},' %
-                           (typeinfo, f.python_binding.name,
-                            dtype.declaration_code(""), f.c_binding.name),
+                           (typeinfo, f.name,
+                            dtype.declaration_code(""), f.c_name),
                                safe=True)
             typecode.putln('  {NULL, NULL, 0}', safe=True)
             typecode.putln("};", safe=True)

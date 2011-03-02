@@ -1127,7 +1127,7 @@ property NAME:
     def visit_CNameDeclaratorNode(self, node):
         if node.name in self.seen_vars_stack[-1]:
             entry = self.env_stack[-1].lookup(node.name)
-            if entry is None or not entry.c_source.extern:
+            if entry is None or not entry.extern:
                 warning(node.pos, "cdef variable '%s' declared after it is used" % node.name, 2)
         self.visitchildren(node)
         return node
@@ -1138,12 +1138,12 @@ property NAME:
         return None
 
     def create_Property(self, entry):
-        if entry.python_binding.visibility == 'public':
+        if entry.visibility == 'public':
             if entry.type.is_pyobject:
                 template = self.basic_pyobject_property
             else:
                 template = self.basic_property
-        elif entry.python_binding.visibility == 'readonly':
+        elif entry.visibility == 'readonly':
             template = self.basic_property_ro
         else:
             raise NotImplementedError('private python methods')
@@ -1151,15 +1151,15 @@ property NAME:
                 u"ATTR": ExprNodes.AttributeNode(
                     pos=entry.pos,
                     obj=ExprNodes.NameNode(pos=entry.pos, name="self"),
-                    attribute=entry.python_binding.name),
+                    attribute=entry.name),
             }, pos=entry.pos).stats[0]
-        property.name = entry.python_binding.name
+        property.name = entry.name
         # ---------------------------------------
         # XXX This should go to AutoDocTransforms
         # ---------------------------------------
         if (Options.docstrings and
             self.current_directives['embedsignature']):
-            attr_name = entry.python_binding.name
+            attr_name = entry.name
             type_name = entry.type.declaration_code("", for_display=1)
             default_value = ''
             if not entry.type.is_pyobject:
@@ -1394,7 +1394,7 @@ class CreateClosureClasses(CythonTransform):
 
         as_name = '%s_%s' % (
             target_module_scope.next_id(Naming.closure_class_prefix),
-            node.entry.c_binding.name)
+            node.entry.c_name)
 
         entry = target_module_scope.declare_c_class(name = as_name,
             pos = node.pos, defining = True, implementing = True)
@@ -1413,8 +1413,8 @@ class CreateClosureClasses(CythonTransform):
             node.needs_outer_scope = True
         for name, entry in in_closure:
             class_scope.declare_var(pos=entry.pos,
-                                    name=entry.python_binding.name,
-                                    cname=entry.c_binding.name,
+                                    name=entry.name,
+                                    cname=entry.c_name,
                                     type=entry.type,
                                     is_cdef=True)
         node.needs_closure = True
@@ -1653,14 +1653,14 @@ class DebugTransform(CythonTransform):
             self.nested_funcdefs.append(node)
             return node
 
-        # node.entry.c_source.extern
+        # node.entry.extern
         if node.py_func is None:
             pf_cname = ''
         else:
             pf_cname = node.py_func.entry.func_cname
 
         attrs = dict(
-            name=node.entry.python_binding.name,
+            name=node.entry.name,
             cname=node.entry.func_cname,
             pf_cname=pf_cname,
             qualified_name=node.local_scope.qualified_name,
@@ -1760,17 +1760,17 @@ class DebugTransform(CythonTransform):
                 # We're dealing with a closure where a variable from an outer
                 # scope is accessed, get it from the scope object.
                 cname = '%s->%s' % (Naming.cur_scope_cname,
-                                    entry.outer_entry.c_binding.name)
+                                    entry.outer_entry.c_name)
 
                 qname = '%s.%s.%s' % (entry.scope.outer_scope.qualified_name,
                                       entry.scope.name,
-                                      entry.python_binding.name)
+                                      entry.name)
             elif entry.in_closure:
                 cname = '%s->%s' % (Naming.cur_scope_cname,
-                                    entry.c_binding.name)
+                                    entry.c_name)
                 qname = entry.qualified_name
             else:
-                cname = entry.c_binding.name
+                cname = entry.c_name
                 qname = entry.qualified_name
 
             if not entry.pos:
@@ -1782,7 +1782,7 @@ class DebugTransform(CythonTransform):
                 lineno = str(entry.pos[1])
 
             attrs = dict(
-                name=entry.python_binding.name,
+                name=entry.name,
                 cname=cname,
                 qualified_name=qname,
                 type=vartype,

@@ -3,40 +3,70 @@
 #
 
 
-class CtxAttribute(object):
-    """Base class for complicated Ctx attributes.
+class _BindingAttributes(object):
+    """Base class for complicated binding attributes.
 
-    Having a single base class makes it easier to generate child
-    contexts.
+    This class allows us to define methods for generating child
+    contexts and pushing/pulling well-defined attribute sets.
+
+    Pushes, pulls, and deepcopies are simplified by assuming that all
+    relevant attribute values are immutable.
     """
-    def deepcopy(self):
+    def __init__(self, **kwargs):
+        self.__dict__.update(kwargs)
+
+    def deepcopy(self, **kwargs):
+        "Return a copy of `self` preserving all attributes."
         cls = type(self)
         cpy = cls()
-        cpy.__dict__.update(self.__dict__)
+        self.push(cpy)
+        cpy.__dict__.update(kwargs)
         return cpy
 
+    def push(self, other):
+        """Push all of `self`'s attributes onto `other`
 
-class CSource(CtxAttribute):
+        Remember that attributes that aren't in `self.__dict__`
+        (e.g. uninitialized, class-wide defaults) will *not* be
+        copied.
+        """
+        other.__dict__.update(self.__dict__)
+
+    def pull(self, other):
+        """Pull all relevant attributes from `other`
+
+        Remember that attributes that aren't in `self.__dict__`
+        (e.g. uninitialized, class-wide defaults) will *not* be
+        copied.
+        """
+        for key,value in other.__dict__.iteritems():
+            if key in dir(self):
+                self.__dict__[key] = value
+
+
+class CSource(_BindingAttributes):
     """Configure the location of an object's C source.
 
-    * name (string): Source symbol name (if the symbol is external)
-    * namespace (string): C++ namespace (`None` for C objects, set if
-      the symbol is external)
+    * source_name (string): Source symbol name (if the symbol is
+      external)
+    * source_namespace (string): C++ namespace (`None` for C objects,
+      set if the symbol is external)
     * cdef_flag (boolean): Symbol (data) has a C definition.
     * extern (boolean): Symbol is defined elsewhere (otherwise a local
       defition is created).
     """
-    name = None
-    namespace = None
+    source_name = None
+    source_namespace = None
     cdef_flag = 0
     extern = 0
 
 
-class CBinding(CtxAttribute):
+class CBinding(_BindingAttributes):
     """Configure the presence and behaviour of an object's C bindings.
 
-    * name (string): Generated symbol name
-    * namespace (string): C++ namespace (`None` for C objects)
+    * c_name (string): Generated symbol name (or source name, is the
+      symbol is external.
+    * c_namespace (string): C++ namespace (`None` for C objects)
     * api (boolean): Add to generated header file
     * visibility ('private'|'public'):
 
@@ -45,14 +75,14 @@ class CBinding(CtxAttribute):
 
     * const (boolean): Symbol data is readonly.
     """
-    name = None
+    c_name = None
     namespace = None
     api = 0
-    visibility = 'private'
+    c_visibility = 'private'
     const = 0
 
 
-class PythonBinding(CtxAttribute):
+class PythonBinding(_BindingAttributes):
     """Configure the presence and behaviour of an object's Python bindings.
 
     * name (string): Name to which the object is bound (if the object
@@ -70,3 +100,8 @@ class PythonBinding(CtxAttribute):
     name = None
     visibility = 'public' #private'
     overridable = 0
+
+
+class Binding(CSource, CBinding, PythonBinding):
+    "Combine all binding attributes in a single, flat namespace."
+    pass

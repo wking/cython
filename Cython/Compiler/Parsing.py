@@ -13,7 +13,7 @@ import re
 import sys
 
 from Cython.Compiler.Scanning import PyrexScanner, FileSourceDescriptor
-from Binding import CtxAttribute, CSource, CBinding, PythonBinding
+from Binding import Binding
 import Nodes
 import ExprNodes
 import StringEncoding
@@ -32,32 +32,17 @@ _LOG.addHandler(logging.StreamHandler())
 _LOG.handlers[-1].setLevel(logging.DEBUG)
 
 
-class Ctx(object):
+class Ctx(Binding):
     #  Parsing context
     level = 'other'
     typedef_flag = 0
     nogil = 0
     templates = None
-    c_source = None
-    c_binding = None
-    python_binding = None
-
-    def __init__(self, **kwds):
-        self.__dict__.update(kwds)
-        if self.c_source is None:
-            self.c_source = CSource()
-        if self.c_binding is None:
-            self.c_binding = CBinding()
-        if self.python_binding is None:
-            self.python_binding = PythonBinding()
 
     def __call__(self, **kwds):
         ctx = Ctx()
         d = ctx.__dict__
         d.update(self.__dict__)
-        for k,v in self.__dict__.iteritems():
-            if isinstance(v, CtxAttribute):
-                d[k] = v.deepcopy()
         d.update(kwds)
         return ctx
 
@@ -1825,7 +1810,7 @@ def p_statement(s, ctx, first_statement = 0):
         decorators = p_decorators(s)
         if s.sy not in ('def', 'cdef', 'cpdef', 'class'):
             s.error("Decorators can only be followed by functions or classes")
-    elif s.sy == 'pass' and ctx.c_source.cdef_flag:
+    elif s.sy == 'pass' and ctx.cdef_flag:
         # empty cdef block
         return p_pass_statement(s, with_newline = 1)
     sy = s.sy
@@ -1834,23 +1819,23 @@ def p_statement(s, ctx, first_statement = 0):
         if ctx.level not in ('module', 'module_pxd'):
             s.error("ctypedef statement not allowed here")
         return p_ctypedef_statement(s, pos, ctx)
-    elif ctx.c_source.cdef_flag:
+    elif ctx.cdef_flag:
         if ctx.level not in ('module', 'module_pxd', 'function', 'c_class', 'c_class_pxd'):
             s.error('cdef statement not allowed here')
         s.level = ctx.level
-    if ctx.c_binding.api:
-        if ctx.c_source.cdef_flag:
-            if ctx.c_source.extern:
+    if ctx.api:
+        if ctx.cdef_flag:
+            if ctx.extern:
                 error(pos, "Cannot combine 'api' with 'extern'")
         else:
             s.error("'api' not allowed with this statement")
-    if ctx.c_source.cdef_flag and p_nogil(s):
+    if ctx.cdef_flag and p_nogil(s):
         ctx.nogil = 1
-        if ctx.python_binding.overridable:
+        if ctx.overridable:
             error(pos, "cdef blocks cannot be declared cpdef")
         return p_cdef_block(s, ctx)
-    elif s.sy == ':' and ctx.c_source.cdef_flag:
-        if ctx.python_binding.overridable:
+    elif s.sy == ':' and ctx.cdef_flag:
+        if ctx.overridable:
             error(pos, "cdef blocks cannot be declared cpdef")
         return p_cdef_block(s, ctx)
     elif s.sy == 'def':
@@ -1861,19 +1846,19 @@ def p_statement(s, ctx, first_statement = 0):
         s.level = ctx.level
         return p_def_statement(s, decorators)
     elif s.sy == 'class':
-        if ctx.c_source.cdef_flag:
+        if ctx.cdef_flag:
             if ctx.level not in ('module', 'module_pxd'):
                 error(pos, "Extension type definition not allowed here")
-            if ctx.python_binding.overridable:
+            if ctx.overridable:
                 error(pos, "Extension types cannot be declared cpdef")
             return p_c_class_definition(s, pos, ctx, decorators)
         else:
             if ctx.level not in ('module', 'function', 'class', 'other'):
                 s.error("class definition not allowed here")
         return p_class_statement(s, decorators)
-    elif s.sy == 'from' and ctx.c_source.extern:
+    elif s.sy == 'from' and ctx.extern:
         return p_cdef_extern_block(s, pos, ctx)
-    elif s.sy == 'import' and ctx.c_source.cdef_flag:
+    elif s.sy == 'import' and ctx.cdef_flag:
         s.next()
         return p_cdef_extern_block(s, pos, ctx)
     elif s.sy == 'include':
@@ -1882,15 +1867,15 @@ def p_statement(s, ctx, first_statement = 0):
         return p_include_statement(s, ctx)
     elif ctx.level == 'c_class' and s.sy == 'IDENT' and s.systring == 'property':
         return p_property_decl(s)
-    elif ctx.c_source.cdef_flag:
+    elif ctx.cdef_flag:
         if s.sy == 'IDENT' and s.systring == 'cppclass':
-            if not ctx.c_source.extern:
+            if not ctx.extern:
                 error(pos, "C++ classes need to be declared extern")
             return p_cpp_class_definition(s, pos, ctx)
         elif s.sy == 'IDENT' and s.systring in ("struct", "union", "enum", "packed"):
             if ctx.level not in ('module', 'module_pxd'):
                 error(pos, "C struct/union/enum definition not allowed here")
-            if ctx.python_binding.overridable:
+            if ctx.overridable:
                 error(pos, "C struct/union/enum cannot be declared cpdef")
             if s.systring == "enum":
                 return p_c_enum_definition(s, pos, ctx)
@@ -1943,7 +1928,7 @@ def p_suite(s, ctx = Ctx(), with_doc = 0, with_pseudo_doc = 0):
         body = p_statement_list(s, ctx)
         s.expect_dedent()
     else:
-        if ctx.c_binding.api:
+        if ctx.api:
             s.error("'api' not allowed with this statement")
         if ctx.level in ('module', 'class', 'function', 'other'):
             body = p_simple_statement_list(s, ctx)
@@ -2361,9 +2346,9 @@ def p_c_simple_declarator(s, ctx, empty, is_type, cmethod_flag,
                 error(s.position(), "Empty declarator")
             name = ""
             cname = None
-        if cname is None and ctx.c_source.namespace is not None and nonempty:
-            cname = ctx.c_source.namespace + "::" + name
-        if name == 'operator' and ctx.c_source.extern and nonempty:
+        if cname is None and ctx.source_namespace is not None and nonempty:
+            cname = ctx.source_namespace + "::" + name
+        if name == 'operator' and ctx.extern and nonempty:
             op = s.sy
             if [1 for c in op if c in '+-*/<=>!%&|([^~,']:
                 s.next()
@@ -2525,7 +2510,7 @@ def p_cdef_block(s, ctx):
 def p_cdef_extern_block(s, pos, ctx):
     _LOG.debug('p_cdef_extern_block(s=<s sy:%s systring:%s>)'
                % (s.sy, s.systring))
-    if ctx.python_binding.overridable:
+    if ctx.overridable:
         error(pos, "cdef extern blocks cannot be declared cpdef")
     include_file = None
     s.expect('from')
@@ -2534,18 +2519,18 @@ def p_cdef_extern_block(s, pos, ctx):
     else:
         include_file = p_string_literal(s, 'u')[2]
     ctx = ctx()
-    ctx.c_source.cdef_flag = 1
-    ctx.c_source.extern = 1
+    ctx.cdef_flag = 1
+    ctx.extern = 1
     if s.systring == "namespace":
         s.next()
-        ctx.c_source.namespace = p_string_literal(s, 'u')[2]
+        ctx.source_namespace = p_string_literal(s, 'u')[2]
     if p_nogil(s):
         ctx.nogil = 1
     body = p_suite(s, ctx)
     return Nodes.CDefExternNode(pos,
         include_file = include_file,
         body = body,
-        namespace = ctx.c_source.namespace)
+        namespace = ctx.source_namespace)
 
 def p_c_enum_definition(s, pos, ctx):
     # s.sy == ident 'enum'
@@ -2556,8 +2541,8 @@ def p_c_enum_definition(s, pos, ctx):
         name = s.systring
         s.next()
         cname = p_opt_cname(s)
-        if cname is None and ctx.c_source.namespace is not None:
-            cname = ctx.c_source.namespace + "::" + name
+        if cname is None and ctx.source_namespace is not None:
+            cname = ctx.source_namespace + "::" + name
     else:
         name = None
         cname = None
@@ -2573,10 +2558,10 @@ def p_c_enum_definition(s, pos, ctx):
             p_c_enum_line(s, ctx, items)
         s.expect_dedent()
     visibility = 'private'
-    if ctx.c_source.extern:
+    if ctx.extern:
         visibility = 'extern'
-    elif ctx.c_binding.visibility != 'private':
-        visibility = ctx.c_binding.visibility
+    elif ctx.c_visibility != 'private':
+        visibility = ctx.c_visibility
     return Nodes.CEnumDefNode(
         pos, name = name, cname = cname, items = items,
         typedef_flag = ctx.typedef_flag, visibility = visibility,
@@ -2603,17 +2588,17 @@ def p_c_enum_item(s, ctx, items):
     ctx = p_binding(s, ctx)
     name = p_ident(s)
     cname = p_opt_cname(s)
-    if cname is None and ctx.c_source.namespace is not None:
-        cname = ctx.c_source.namespace + "::" + name
+    if cname is None and ctx.source_namespace is not None:
+        cname = ctx.source_namespace + "::" + name
     value = None
     if s.sy == '=':
         s.next()
         value = p_test(s)
     visibility = 'private'
-    if ctx.c_source.extern:
+    if ctx.extern:
         visibility = 'extern'
-    elif ctx.c_binding.visibility != 'private':
-        visibility = ctx.c_binding.visibility
+    elif ctx.c_visibility != 'private':
+        visibility = ctx.c_visibility
     items.append(Nodes.CEnumDefItemNode(pos,
         name = name, cname = cname, value = value,
         visibility = visibility,
@@ -2634,8 +2619,8 @@ def p_c_struct_or_union_definition(s, pos, ctx):
     s.next()
     name = p_ident(s)
     cname = p_opt_cname(s)
-    if cname is None and ctx.c_source.namespace is not None:
-        cname = ctx.c_source.namespace + "::" + name
+    if cname is None and ctx.source_namespace is not None:
+        cname = ctx.source_namespace + "::" + name
     attributes = None
     if s.sy == ':':
         s.next()
@@ -2654,18 +2639,18 @@ def p_c_struct_or_union_definition(s, pos, ctx):
     else:
         s.expect_newline("Syntax error in struct or union definition")
     visibility = 'private'
-    if ctx.c_source.extern:
+    if ctx.extern:
         visibility = 'extern'
-    elif ctx.c_binding.visibility != 'private':
-        visibility = ctx.c_binding.visibility
+    elif ctx.c_visibility != 'private':
+        visibility = ctx.c_visibility
     return Nodes.CStructOrUnionDefNode(pos,
         name = name,
         cname = cname,
         kind = kind,
         attributes = attributes,
         typedef_flag = ctx.typedef_flag,
-        cdef_flag = ctx.c_source.cdef_flag,
-        overridable = ctx.python_binding.overridable,
+        cdef_flag = ctx.cdef_flag,
+        overridable = ctx.overridable,
         visibility = visibility,
         in_pxd = ctx.level == 'module_pxd',
         packed = packed)
@@ -2675,10 +2660,10 @@ def p_visibility(s, ctx):
                % (s.sy, s.systring))
     pos = s.position()
     prev_visibility = 'private'
-    if ctx.c_source.extern:
+    if ctx.extern:
         prev_visibility = 'extern'
-    elif ctx.c_binding.visibility != 'private':
-        prev_visibility = ctx.c_binding.visibility
+    elif ctx.c_visibility != 'private':
+        prev_visibility = ctx.c_visibility
     visibility = prev_visibility
     if s.sy == 'IDENT' and s.systring in ('extern', 'public', 'readonly'):
         visibility = s.systring
@@ -2687,9 +2672,9 @@ def p_visibility(s, ctx):
                 % (prev_visibility, visibility))
         s.next()
     if visibility == 'extern':
-        ctx.c_source.extern = 1
+        ctx.extern = 1
     else:
-        ctx.c_binding.visibility = visibility
+        ctx.c_visibility = visibility
     return ctx
 
 def p_c_modifiers(s):
@@ -2705,25 +2690,25 @@ def p_binding(s, ctx):
     _LOG.debug('p_binding(s=<s sy:%s systring:%s>)'
                % (s.sy, s.systring))
     new_ctx = ctx()
-    new_ctx.python_binding.overridable = 0
+    new_ctx.overridable = 0
     if s.sy == 'cdef':
-        new_ctx.c_source.cdef_flag = 1
+        new_ctx.cdef_flag = 1
         s.next()
     elif s.sy == 'cpdef':
-        new_ctx.c_source.cdef_flag = 1
-        new_ctx.python_binding.overridable = 1
+        new_ctx.cdef_flag = 1
+        new_ctx.overridable = 1
         s.next()
     elif s.sy == 'ctypedef':
         new_ctx.typedef_flag = 1
-        new_ctx.c_source.cdef_flag = 1
+        new_ctx.cdef_flag = 1
         s.next()
-    if new_ctx.c_source.cdef_flag:
+    if new_ctx.cdef_flag:
         new_ctx = p_visibility(s, new_ctx)
-        new_ctx.c_binding.api = ctx.c_binding.api or p_api(s)
-    _LOG.info('  binding cdef: %s' % new_ctx.c_source.cdef_flag)
+        new_ctx.api = ctx.api or p_api(s)
+    _LOG.info('  binding cdef: %s' % new_ctx.cdef_flag)
     _LOG.info('  binding ctypedef: %s' % new_ctx.typedef_flag)
-    _LOG.info('  c binding api: %s' % new_ctx.c_binding.api)
-    _LOG.info('  python binding overridable: %s' % new_ctx.python_binding.overridable)
+    _LOG.info('  c binding api: %s' % new_ctx.api)
+    _LOG.info('  python binding overridable: %s' % new_ctx.overridable)
     return new_ctx
 
 def p_c_func_or_var_declaration(s, pos, ctx, decorators=None):
@@ -2734,19 +2719,19 @@ def p_c_func_or_var_declaration(s, pos, ctx, decorators=None):
     base_type = p_c_base_type(s, nonempty = 1, templates = ctx.templates)
     declarator = p_c_declarator(s, ctx, cmethod_flag = cmethod_flag,
                                 assignable = 1, nonempty = 1)
-    declarator.overridable = ctx.python_binding.overridable
+    declarator.overridable = ctx.overridable
     if s.sy == ':':
         if ctx.level not in ('module', 'c_class', 'module_pxd', 'c_class_pxd') and not ctx.templates:
             s.error("C function definition not allowed here")
         doc, suite = p_suite(s, Ctx(level = 'function'), with_doc = 1)
         visibility = 'private'
-        if ctx.c_source.extern:
+        if ctx.extern:
             visibility = 'extern'
-        elif ctx.c_binding.visibility != 'private':
-            visibility = ctx.c_binding.visibility
+        elif ctx.c_visibility != 'private':
+            visibility = ctx.c_visibility
         result = Nodes.CFuncDefNode(pos,
-            cdef_flag = ctx.c_source.cdef_flag,
-            overridable = ctx.python_binding.overridable,
+            cdef_flag = ctx.cdef_flag,
+            overridable = ctx.overridable,
             visibility = visibility,
             base_type = base_type,
             declarator = declarator,
@@ -2754,7 +2739,7 @@ def p_c_func_or_var_declaration(s, pos, ctx, decorators=None):
             body = suite,
             doc = doc,
             modifiers = modifiers,
-            api = ctx.c_binding.api)
+            api = ctx.api)
     else:
         #if api:
         #    s.error("'api' not allowed with variable declaration")
@@ -2768,14 +2753,14 @@ def p_c_func_or_var_declaration(s, pos, ctx, decorators=None):
             declarators.append(declarator)
         s.expect_newline("Syntax error in C variable declaration")
         visibility = 'private'
-        if ctx.c_source.extern:
+        if ctx.extern:
             visibility = 'extern'
-        elif ctx.c_binding.visibility != 'private':
-            visibility = ctx.c_binding.visibility
+        elif ctx.c_visibility != 'private':
+            visibility = ctx.c_visibility
         result = Nodes.CVarDefNode(pos,
             visibility = visibility,
-            api = ctx.c_binding.api,
-            overridable = ctx.python_binding.overridable,
+            api = ctx.api,
+            overridable = ctx.overridable,
             base_type = base_type,
             declarators = declarators,
             decorators = decorators,
@@ -2799,10 +2784,10 @@ def p_ctypedef_statement(s, pos, ctx):
         declarator = p_c_declarator(s, ctx, is_type = 1, nonempty = 1)
         s.expect_newline("Syntax error in ctypedef statement")
         visibility = 'private'
-        if ctx.c_source.extern:
+        if ctx.extern:
             visibility = 'extern'
-        elif ctx.c_binding.visibility != 'private':
-            visibility = ctx.c_binding.visibility
+        elif ctx.c_visibility != 'private':
+            visibility = ctx.c_visibility
         return Nodes.CTypeDefNode(
             pos, base_type = base_type,
             declarator = declarator, visibility = visibility,
@@ -2919,7 +2904,7 @@ def p_c_class_definition(s, pos,  ctx, decorators=None):
         s.next()
         module_path.append(class_name)
         class_name = p_ident(s)
-    if module_path and not ctx.c_source.extern:
+    if module_path and not ctx.extern:
         error(pos, "Qualified class name only allowed for 'extern' C class")
     if module_path and s.sy == 'IDENT' and s.systring == 'as':
         s.next()
@@ -2942,7 +2927,7 @@ def p_c_class_definition(s, pos,  ctx, decorators=None):
         base_class_module = ".".join(base_class_path[:-1])
         base_class_name = base_class_path[-1]
     if s.sy == '[':
-        if not (ctx.c_source.extern or ctx.c_binding.visibility == 'public'):
+        if not (ctx.extern or ctx.c_visibility == 'public'):
             error(s.position(), "Name options only allowed for 'public' or 'extern' C class")
         objstruct_name, typeobj_name = p_c_class_options(s)
     if s.sy == ':':
@@ -2956,29 +2941,29 @@ def p_c_class_definition(s, pos,  ctx, decorators=None):
         doc = None
         body = None
     visibility = 'private'
-    if ctx.c_source.extern:
+    if ctx.extern:
         visibility = 'extern'
-    elif ctx.c_binding.visibility != 'private':
-        visibility = ctx.c_binding.visibility
-    if ctx.c_source.extern:
+    elif ctx.c_visibility != 'private':
+        visibility = ctx.c_visibility
+    if ctx.extern:
         if not module_path:
             error(pos, "Module name required for 'extern' C class")
         if typeobj_name:
             error(pos, "Type object name specification not allowed for 'extern' C class")
-    elif ctx.c_binding.visibility == 'public':
+    elif ctx.c_visibility == 'public':
         if not objstruct_name:
             error(pos, "Object struct name specification required for 'public' C class")
         if not typeobj_name:
             error(pos, "Type object name specification required for 'public' C class")
-    elif ctx.c_binding.visibility == 'private':
-        if ctx.c_binding.api:
+    elif ctx.c_visibility == 'private':
+        if ctx.api:
             error(pos, "Only 'public' C class can be declared 'api'")
     else:
         error(pos, "Invalid class visibility '%s'" % visibility)
     return Nodes.CClassDefNode(pos,
         visibility = visibility,
         typedef_flag = ctx.typedef_flag,
-        api = ctx.c_binding.api,
+        api = ctx.api,
         module_name = ".".join(module_path),
         class_name = class_name,
         as_name = as_name,
@@ -3097,8 +3082,8 @@ def p_cpp_class_definition(s, pos,  ctx):
     module_path = []
     class_name = p_ident(s)
     cname = p_opt_cname(s)
-    if cname is None and ctx.c_source.namespace is not None:
-        cname = ctx.c_source.namespace + "::" + class_name
+    if cname is None and ctx.source_namespace is not None:
+        cname = ctx.source_namespace + "::" + class_name
     if s.sy == '.':
         error(pos, "Qualified class name not allowed C++ class")
     if s.sy == '[':
@@ -3127,9 +3112,9 @@ def p_cpp_class_definition(s, pos,  ctx):
         s.expect_indent()
         attributes = []
         body_ctx = Ctx()
-        body_ctx.c_binding.visibility = p_visibility(s, ctx)
-        body_ctx.python_binding.visibility = ctx.python_binding.visibility
-        body_ctx.c_source.extern = ctx.c_source.extern
+        body_ctx.c_visibility = p_visibility(s, ctx)
+        body_ctx.visibility = ctx.visibility
+        body_ctx.extern = ctx.extern
         body_ctx.templates = templates
         while s.sy != 'DEDENT':
             if s.systring == 'cppclass':
@@ -3146,10 +3131,10 @@ def p_cpp_class_definition(s, pos,  ctx):
         attributes = None
         s.expect_newline("Syntax error in C++ class definition")
     visibility = 'private'
-    if ctx.c_source.extern:
+    if ctx.extern:
         visibility = 'extern'
-    elif ctx.c_binding.visibility != 'private':
-        visibility = ctx.c_binding.visibility
+    elif ctx.c_visibility != 'private':
+        visibility = ctx.c_visibility
     return Nodes.CppClassNode(pos,
         name = class_name,
         cname = cname,

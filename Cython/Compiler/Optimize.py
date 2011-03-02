@@ -1989,7 +1989,7 @@ class OptimizeBuiltinCalls(Visitor.EnvTransform):
             builtin_type = None
             if isinstance(test_type_node, ExprNodes.NameNode):
                 if test_type_node.entry:
-                    entry = env.lookup(test_type_node.entry.python_binding. name)
+                    entry = env.lookup(test_type_node.entry.name)
                     if entry and entry.type and entry.type.is_builtin_type:
                         builtin_type = entry.type
             if builtin_type and builtin_type is not Builtin.type_type:

@@ -73,13 +73,13 @@ class AutoTestDictTransform(ScopeTrackingTransform):
 
         pos = self.testspos
         if self.scope_type == 'module':
-            path = node.entry.python_binding.name
+            path = node.entry.name
         elif self.scope_type in ('pyclass', 'cclass'):
             if isinstance(node, CFuncDefNode):
                 if node.py_func is not None:
                     name = node.py_func.name
                 else:
-                    name = node.entry.python_binding.name
+                    name = node.entry.name
             else:
                 name = node.name
             if self.scope_type == 'cclass' and name in self.blacklist:
@@ -91,9 +91,9 @@ class AutoTestDictTransform(ScopeTrackingTransform):
             if isinstance(node.entry.scope, Symtab.PropertyScope):
                 property_method_name = node.entry.scope.name
                 path = "%s.%s.%s" % (class_name, node.entry.scope.name,
-                                     node.entry.python_binding.name)
+                                     node.entry.name)
             else:
-                path = "%s.%s" % (class_name, node.entry.python_binding.name)
+                path = "%s.%s" % (class_name, node.entry.name)
         else:
             assert False
         self.add_test(node.pos, path, node.doc)

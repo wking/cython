@@ -1322,7 +1322,7 @@ class NameNode(AtomicExprNode):
     def get_constant_c_result_code(self):
         if not self.entry or self.entry.type.is_pyobject:
             return None
-        return self.entry.c_binding.name
+        return self.entry.c_name
 
     def coerce_to(self, dst_type, env):
         #  If coercing to a generic pyobject and this is a builtin
@@ -1336,7 +1336,7 @@ class NameNode(AtomicExprNode):
                 if var_entry:
                     if var_entry.is_builtin and Options.cache_builtins:
                         var_entry = env.declare_builtin(
-                            var_entry.python_binding.name, self.pos)
+                            var_entry.name, self.pos)
                     node = NameNode(self.pos, name = self.name)
                     node.entry = var_entry
                     node.analyse_rvalue_entry(env)
@@ -1512,7 +1512,7 @@ class NameNode(AtomicExprNode):
         entry = self.entry
         if not entry:
             return "<error>" # There was an error earlier
-        return entry.c_binding.name
+        return entry.c_name
 
     def generate_result_code(self, code):
         assert hasattr(self, 'entry')
@@ -1524,7 +1524,7 @@ class NameNode(AtomicExprNode):
         elif entry.is_pyclass_attr:
             assert entry.type.is_pyobject, "Python global or builtin not a Python object"
             interned_cname = code.intern_identifier(
-                self.entry.python_binding.name)
+                self.entry.name)
             if entry.is_builtin:
                 namespace = Naming.builtins_cname
             else: # entry.is_pyglobal
@@ -1540,7 +1540,7 @@ class NameNode(AtomicExprNode):
         elif entry.is_pyglobal or entry.is_builtin:
             assert entry.type.is_pyobject, "Python global or builtin not a Python object"
             interned_cname = code.intern_identifier(
-                self.entry.python_binding.name)
+                self.entry.name)
             if entry.is_builtin:
                 namespace = Naming.builtins_cname
             else: # entry.is_pyglobal
@@ -1557,19 +1557,19 @@ class NameNode(AtomicExprNode):
         elif entry.is_local and False:
             # control flow not good enough yet
             assigned = entry.scope.control_flow.get_state(
-                (entry.python_binding.name, 'initialized'), self.pos)
+                (entry.name, 'initialized'), self.pos)
             if assigned is False:
                 error(
                     self.pos,
                     "local variable '%s' referenced before assignment" %
-                    entry.python_binding.name)
+                    entry.name)
             elif not Options.init_local_none and assigned is None:
                 code.putln(
                     'if (%s == 0) { PyErr_SetString(PyExc_UnboundLocalError, "%s"); %s }' %
-                    (entry.c_binding.name, entry.python_binding.name,
+                    (entry.c_name, entry.name,
                      code.error_goto(self.pos)))
                 entry.scope.control_flow.set_state(
-                    self.pos, (entry.python_binding.name, 'initialized'), True)
+                    self.pos, (entry.name, 'initialized'), True)
 
     def generate_assignment_code(self, rhs, code):
         #print "NameNode.generate_assignment_code:", self.name ###
@@ -1586,7 +1586,7 @@ class NameNode(AtomicExprNode):
         if entry.is_pyglobal:
             assert entry.type.is_pyobject, "Python global or builtin not a Python object"
             interned_cname = code.intern_identifier(
-                self.entry.python_binding.name)
+                self.entry.name)
             namespace = self.entry.scope.namespace_cname
             if entry.is_member:
                 # if the entry is a member we have to cheat: SetAttr does not work
@@ -1643,7 +1643,7 @@ class NameNode(AtomicExprNode):
                     if not self.lhs_of_first_assignment:
                         if entry.is_local and not Options.init_local_none:
                             initialized = entry.scope.control_flow.get_state(
-                                (entry.python_binding.name, 'initialized'),
+                                (entry.name, 'initialized'),
                                 self.pos)
                             if initialized is True:
                                 code.put_decref(self.result(), self.ctype())
@@ -1674,7 +1674,7 @@ class NameNode(AtomicExprNode):
             code.putln('%s = %s;' % (rhstmp, rhs.result_as(self.ctype())))
 
         buffer_aux = self.entry.buffer_aux
-        bufstruct = buffer_aux.buffer_info_var.c_binding.name
+        bufstruct = buffer_aux.buffer_info_var.c_name
         import Buffer
         Buffer.put_assign_to_buffer(self.result(), rhstmp, buffer_aux, self.entry.type,
                                     is_initialized=not self.lhs_of_first_assignment,
@@ -1695,12 +1695,12 @@ class NameNode(AtomicExprNode):
             code.put_error_if_neg(self.pos,
                 'PyMapping_DelItemString(%s, "%s")' % (
                     namespace,
-                    self.entry.python_binding.name))
+                    self.entry.name))
         else:
             code.put_error_if_neg(self.pos,
                 '__Pyx_DelAttrString(%s, "%s")' % (
                     Naming.module_cname,
-                    self.entry.python_binding.name))
+                    self.entry.name))
 
     def annotate(self, code):
         if hasattr(self, 'is_called') and self.is_called:
@@ -2791,7 +2791,7 @@ class CallNode(ExprNode):
             for arg, member in zip(args, type.scope.var_entries):
                 items.append(DictItemNode(
                         pos=arg.pos, key=StringNode(
-                            pos=arg.pos, value=member.python_binding.name),
+                            pos=arg.pos, value=member.name),
                         value=arg))
             if kwds:
                 items += kwds.key_value_pairs
@@ -2873,9 +2873,9 @@ class SimpleCallNode(CallNode):
                 if result_type.is_extension_type:
                     return result_type
                 elif result_type.is_builtin_type:
-                    if function.entry.python_binding.name == 'float':
+                    if function.entry.name == 'float':
                         return PyrexTypes.c_double_type
-                    elif (function.entry.python_binding.name
+                    elif (function.entry.name
                           in Builtin.types_that_construct_their_instance):
                         return result_type
         return py_object_type
@@ -2917,16 +2917,16 @@ class SimpleCallNode(CallNode):
             if (func_type is Builtin.type_type and function.is_name and
                 function.entry and
                 function.entry.is_builtin and
-                (function.entry.python_binding.name
+                (function.entry.name
                  in Builtin.types_that_construct_their_instance)):
                 # calling a builtin type that returns a specific object type
-                if function.entry.python_binding.name == 'float':
+                if function.entry.name == 'float':
                     # the following will come true later on in a transform
                     self.type = PyrexTypes.c_double_type
                     self.result_ctype = PyrexTypes.c_double_type
                 else:
                     self.type = Builtin.builtin_types[
-                        function.entry.python_binding.name]
+                        function.entry.name]
                     self.result_ctype = py_object_type
                 self.may_return_none = False
             elif function.is_name and function.type_entry:
@@ -2948,7 +2948,7 @@ class SimpleCallNode(CallNode):
                 if self_arg.not_none: # C methods must do the None test for self at *call* time
                     self.self = self.self.as_none_safe_node(
                         "'NoneType' object has no attribute '%s'" %
-                        self.function.entry.python_binding.name,
+                        self.function.entry.name,
                         'PyExc_AttributeError')
                 expected_type = self_arg.type
                 self.coerced_self = CloneNode(self.self).coerce_to(
@@ -3179,11 +3179,11 @@ class SimpleCallNode(CallNode):
                         raise_py_exception = "__Pyx_CppExn2PyErr()"
                     elif func_type.exception_value.type.is_pyobject:
                         raise_py_exception = ' try { throw; } catch(const std::exception& exn) { PyErr_SetString(%s, exn.what()); } catch(...) { PyErr_SetNone(%s); }' % (
-                            func_type.exception_value.entry.c_binding.name,
-                            func_type.exception_value.entry.c_binding.name)
+                            func_type.exception_value.entry.c_name,
+                            func_type.exception_value.entry.c_name)
                     else:
                         raise_py_exception = '%s(); if (!PyErr_Occurred()) PyErr_SetString(PyExc_RuntimeError , "Error converting c++ exception.")' % (
-                            func_type.exception_value.entry.c_binding.name)
+                            func_type.exception_value.entry.c_name)
                     if self.nogil:
                         raise_py_exception = 'Py_BLOCK_THREADS; %s; Py_UNBLOCK_THREADS' % raise_py_exception
                     code.putln(
@@ -3504,8 +3504,8 @@ class AttributeNode(ExprNode):
             if entry and entry.is_cmethod:
                 # Create a temporary entry describing the C method
                 # as an ordinary function.
-                ubcm_entry = Symtab.Entry(entry.python_binding.name,
-                    "%s->%s" % (type.vtabptr_cname, entry.c_binding.name),
+                ubcm_entry = Symtab.Entry(entry.name,
+                    "%s->%s" % (type.vtabptr_cname, entry.c_name),
                     entry.type)
                 ubcm_entry.is_cfunction = 1
                 ubcm_entry.func_cname = entry.func_cname
@@ -3606,13 +3606,13 @@ class AttributeNode(ExprNode):
             self.entry = entry
             if entry:
                 if (obj_type.is_extension_type and
-                    entry.python_binding.name == "__weakref__"):
+                    entry.name == "__weakref__"):
                     error(self.pos, "Illegal use of special attribute __weakref__")
                 # methods need the normal attribute lookup
                 # because they do not have struct entries
                 if entry.is_variable or entry.is_cmethod:
                     self.type = entry.type
-                    self.member = entry.c_binding.name
+                    self.member = entry.c_name
                     return
                 else:
                     # If it's not a variable or C method, it must be a Python
@@ -4241,7 +4241,7 @@ class ListNode(SequenceNode):
             for arg, member in zip(self.args, self.type.scope.var_entries):
                 code.putln("%s.%s = %s;" % (
                         self.result(),
-                        member.c_binding.name,
+                        member.c_name,
                         arg.result()))
         else:
             raise InternalError("List type never specified")
