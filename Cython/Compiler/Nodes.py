@@ -972,11 +972,13 @@ class CVarDefNode(StatNode):
 
 
 class CStructOrUnionDefNode(StatNode):
-    #  name          string
-    #  cname         string or None
+    #  name          (same as Binding.name)
+    #  cname         (same as Binding.cname)
     #  kind          "struct" or "union"
     #  typedef_flag  boolean
-    #  visibility    "public" or "private"
+    #  extern        (same as Binding.extern)
+    #  c_visibility  (same as Binding.c_visibility)
+    #  visibility    (same as Binding.visibility)
     #  in_pxd        boolean
     #  attributes    [CVarDefNode] or None
     #  entry         Entry
@@ -986,19 +988,22 @@ class CStructOrUnionDefNode(StatNode):
 
     def analyse_declarations(self, env):
         scope = None
-        if self.visibility == 'extern' and self.packed:
+        if self.extern and self.packed:
             error(self.pos, "Cannot declare extern struct as 'packed'")
         if self.attributes is not None:
             scope = StructOrUnionScope(self.name)
-        self.entry = env.declare_struct_or_union(
-            self.name, self.kind, scope, self.typedef_flag, self.pos,
-            self.cname, visibility = self.visibility, packed = self.packed)
+        binding = Binding()
+        binding.pull(self)
+        self.entry = env.WTK_declare_struct_or_union(
+            binding, kind = self.kind, scope = scope,
+            typedef_flag = self.typedef_flag, packed = self.packed,
+            pos = self.pos)
         if self.attributes is not None:
             if self.in_pxd and not env.in_cinclude:
                 self.entry.defined_in_pxd = 1
             for attr in self.attributes:
                 attr.analyse_declarations(env, scope)
-            if self.visibility != 'extern':
+            if not self.extern:
                 need_typedef_indirection = False
                 for attr in scope.var_entries:
                     type = attr.type
@@ -1014,9 +1019,12 @@ class CStructOrUnionDefNode(StatNode):
                 if need_typedef_indirection:
                     # C can't handle typedef structs that refer to themselves.
                     struct_entry = self.entry
-                    self.entry = env.declare_typedef(
-                        self.name, struct_entry.type, self.pos,
-                        cname = self.cname, visibility='ignore')
+                    binding = Binding()
+                    binding.pull(self)
+                    binding.c_visibility = 'ignore'
+                    binding.visibility = 'private'
+                    self.entry = env.WTK_declare_typedef(
+                        binding, base_type = struct_entry.type, pos = self.pos)
                     struct_entry.type.typedef_flag = False
                     # FIXME: this might be considered a hack ;-)
                     struct_entry.cname = struct_entry.type.cname = \
@@ -1030,10 +1038,11 @@ class CStructOrUnionDefNode(StatNode):
 
 
 class CppClassNode(CStructOrUnionDefNode):
-
-    #  name          string
-    #  cname         string or None
-    #  visibility    "extern"
+    #  name          (same as Binding.name)
+    #  cname         (same as Binding.cname)
+    #  extern        1 (same meaning as Binding.extern)
+    #  c_visibility  "public" (same as Binding.c_visibility)
+    #  visibility    (same as Binding.visibility)
     #  in_pxd        boolean
     #  attributes    [CVarDefNode] or None
     #  entry         Entry
@@ -1057,9 +1066,11 @@ class CppClassNode(CStructOrUnionDefNode):
             template_types = None
         else:
             template_types = [PyrexTypes.TemplatePlaceholderType(template_name) for template_name in self.templates]
-        self.entry = env.declare_cpp_class(
-            self.name, scope, self.pos,
-            self.cname, base_class_types, visibility = self.visibility, templates = template_types)
+        binding = Binding()
+        binding.pull(self)
+        self.entry = env.WTK_declare_cpp_class(
+            binding, scope = scope, base_classes = base_class_types,
+            templates = template_types, pos = self.pos)
         self.entry.is_cpp_class = 1
         if self.attributes is not None:
             if self.in_pxd and not env.in_cinclude:

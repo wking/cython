@@ -2638,11 +2638,6 @@ def p_c_struct_or_union_definition(s, pos, ctx):
         s.expect_dedent()
     else:
         s.expect_newline("Syntax error in struct or union definition")
-    visibility = 'private'
-    if ctx.extern:
-        visibility = 'extern'
-    elif ctx.c_visibility != 'private':
-        visibility = ctx.c_visibility
     return Nodes.CStructOrUnionDefNode(pos,
         name = name,
         cname = cname,
@@ -2651,7 +2646,9 @@ def p_c_struct_or_union_definition(s, pos, ctx):
         typedef_flag = ctx.typedef_flag,
         cdef_flag = ctx.cdef_flag,
         overridable = ctx.overridable,
-        visibility = visibility,
+        extern = ctx.extern,
+        c_visibility = ctx.c_visibility,
+        visibility = ctx.visibility,
         in_pxd = ctx.level == 'module_pxd',
         packed = packed)
 
@@ -3132,16 +3129,13 @@ def p_cpp_class_definition(s, pos,  ctx):
     else:
         attributes = None
         s.expect_newline("Syntax error in C++ class definition")
-    visibility = 'private'
-    if ctx.extern:
-        visibility = 'extern'
-    elif ctx.c_visibility != 'private':
-        visibility = ctx.c_visibility
     return Nodes.CppClassNode(pos,
         name = class_name,
         cname = cname,
         base_classes = base_classes,
-        visibility = visibility,
+        extern = ctx.extern,
+        c_visibility = ctx.c_visibility,
+        visibility = ctx.visibility,
         in_pxd = ctx.level == 'module_pxd',
         attributes = attributes,
         templates = templates)
