@@ -682,7 +682,7 @@ class CNumericType(CType):
             self.scope = scope = Symtab.CClassScope(
                     '',
                     None,
-                    visibility="extern")
+                    extern=1)
             scope.parent_type = self
             scope.directives = {}
             entry = scope.declare_cfunction(
@@ -1187,7 +1187,7 @@ class CComplexType(CNumericType):
             self.scope = scope = Symtab.CClassScope(
                     '',
                     None,
-                    visibility="extern")
+                    extern=1)
             scope.parent_type = self
             scope.directives = {}
             scope.declare_var("real", self.real_type, None, "real", is_cdef=True)

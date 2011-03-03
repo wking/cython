@@ -952,8 +952,9 @@ class BuiltinScope(Scope):
     def WTK_declare_builtin_type(self, binding, objstruct_cname = None, utility_code = None):
         binding.name = EncodedString(binding.name)
         type = PyrexTypes.BuiltinObjectType(binding.name, binding.cname, objstruct_cname)
-        # WTK: TODO: visibility checking.  CClassCcope visibility splitting
-        scope = CClassScope(binding.name, outer_scope=None, visibility='extern')
+        # WTK: TODO: visibility checking
+        scope = CClassScope(
+            binding.name, outer_scope = None, extern = 1)
         scope.directives = {}
         if binding.name == 'bool':
             scope.directives['final'] = True
@@ -1311,15 +1312,10 @@ class ModuleScope(Scope):
         #
         if not type.scope:
             if defining or implementing:
-                visibility = 'private'
-                if binding.extern:
-                    visibility = 'extern'
-                elif binding.c_visibility != 'private':
-                    visibility = binding.c_visibility
                 scope = CClassScope(
                     name = binding.name,
                     outer_scope = self,
-                    visibility = visibility)  # WTK: scope visiblity?
+                    extern = binding.extern)
                 if base_type and base_type.scope:
                     scope.declare_inherited_c_attributes(base_type.scope)
                 type.set_scope(scope)
@@ -1781,9 +1777,9 @@ class CClassScope(ClassScope):
 
     is_c_class_scope = 1
 
-    def __init__(self, name, outer_scope, visibility):
+    def __init__(self, name, outer_scope, extern):
         ClassScope.__init__(self, name, outer_scope)
-        if visibility != 'extern':
+        if not extern:
             self.method_table_cname = outer_scope.mangle(Naming.methtab_prefix, name)
             self.getset_table_cname = outer_scope.mangle(Naming.gstab_prefix, name)
         self.has_pyobject_attrs = 0
