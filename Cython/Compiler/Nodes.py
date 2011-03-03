@@ -3473,7 +3473,11 @@ class SingleAssignmentNode(AssignmentNode):
                         self.declaration_only = True
                         if not isinstance(lhs, ExprNodes.NameNode):
                             error(lhs.pos, "Invalid declaration.")
-                        env.declare_typedef(lhs.name, type, self.pos, visibility='private')
+                        binding = Binding(
+                            name = lhs.name, c_visibility='private',
+                            visibility='public')
+                        env.WTK_declare_typedef(
+                            binding, base_type = type, pos = self.pos)
 
                 elif func_name in ['struct', 'union']:
                     self.declaration_only = True
