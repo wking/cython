@@ -1618,17 +1618,19 @@ class CFuncDefNode(FuncDefNode):
     #  C function definition.
     #
     #  modifiers     ['inline']
-    #  visibility    'private' or 'public' or 'extern'
+    #  extern        (same as Binding.extern)
+    #  c_visibility  (same as Binding.c_visibility)
+    #  visibility    (same as Binding.visibility)
     #  base_type     CBaseTypeNode
     #  declarator    CDeclaratorNode
     #  body          StatListNode
-    #  api           boolean
+    #  api           (same as Binding.api)
     #  decorators    [DecoratorNode]        list of decorators
     #
     #  with_gil      boolean    Acquire GIL around body
     #  type          CFuncType
     #  py_func       wrapper for calling from Python
-    #  overridable   whether or not this is a cpdef function
+    #  overridable   (same as Binding.overridable)
     #  inline_in_pxd whether this is an inline function in a pxd file
 
     child_attrs = ["base_type", "declarator", "body", "py_func"]
@@ -1664,16 +1666,16 @@ class CFuncDefNode(FuncDefNode):
             formal_arg.cname = type_arg.cname
             if type_arg.type.is_buffer and 'inline' in self.modifiers:
                 warning(formal_arg.pos, "Buffer unpacking not optimized away.", 1)
-        name = name_declarator.name
-        cname = name_declarator.cname
-        self.entry = env.declare_cfunction(
-            name, type, self.pos,
-            cname = cname, visibility = self.visibility,
-            defining = self.body is not None,
-            api = self.api, modifiers = self.modifiers)
+        binding = Binding()
+        binding.pull(self)
+        binding.name = name_declarator.name
+        binding.cname = name_declarator.cname
+        self.entry = env.WTK_declare_cfunction(
+            binding, type = type, defining = self.body is not None,
+            modifiers = self.modifiers, pos = self.pos)
         self.entry.inline_func_in_pxd = self.inline_in_pxd
         self.return_type = type.return_type
-        if self.return_type.is_array and visibility != 'extern':
+        if self.return_type.is_array and not self.extern:
             error(self.pos,
                 "Function cannot return an array")
 
@@ -1697,7 +1699,7 @@ class CFuncDefNode(FuncDefNode):
             self.py_func.analyse_declarations(env)
             self.entry.as_variable = self.py_func.entry
             # Reset scope entry the above cfunction
-            env.entries[name] = self.entry
+            env.entries[self.entry.name] = self.entry
             if not env.is_module_scope or Options.lookup_module_cpdef:
                 self.override = OverrideCheckNode(self.pos, py_func = self.py_func)
                 self.body = StatListNode(self.pos, stats=[self.override, self.body])
@@ -1990,7 +1992,9 @@ class DefNode(FuncDefNode):
                             type = cfunc_type,
                             with_gil = cfunc_type.with_gil,
                             nogil = cfunc_type.nogil,
-                            visibility = 'private',
+                            extern = 0,
+                            c_visibility = 'private',
+                            visibility = 'public',
                             api = False,
                             directive_locals = getattr(cfunc, 'directive_locals', {}))
 

@@ -2722,15 +2722,12 @@ def p_c_func_or_var_declaration(s, pos, ctx, decorators=None):
         if ctx.level not in ('module', 'c_class', 'module_pxd', 'c_class_pxd') and not ctx.templates:
             s.error("C function definition not allowed here")
         doc, suite = p_suite(s, Ctx(level = 'function'), with_doc = 1)
-        visibility = 'private'
-        if ctx.extern:
-            visibility = 'extern'
-        elif ctx.c_visibility != 'private':
-            visibility = ctx.c_visibility
         result = Nodes.CFuncDefNode(pos,
             cdef_flag = ctx.cdef_flag,
             overridable = ctx.overridable,
-            visibility = visibility,
+            extern = ctx.extern,
+            c_visibility = ctx.c_visibility,
+            visibility = ctx.visibility,
             base_type = base_type,
             declarator = declarator,
             decorators = decorators,

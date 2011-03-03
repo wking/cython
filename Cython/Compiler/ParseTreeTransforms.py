@@ -518,7 +518,7 @@ class PxdPostParse(CythonTransform, SkipDeclarations):
         if isinstance(node, Nodes.CFuncDefNode):
             if u'inline' in node.modifiers and self.scope_type == 'pxd':
                 node.inline_in_pxd = True
-                if node.visibility != 'private':
+                if node.c_visibility != 'private':
                     err = self.ERR_NOGO_WITH_INLINE % node.visibility
                 elif node.api:
                     err = self.ERR_NOGO_WITH_INLINE % 'api'
