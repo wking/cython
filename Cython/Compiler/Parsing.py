@@ -2775,14 +2775,10 @@ def p_ctypedef_statement(s, pos, ctx):
             s.error("Syntax error in ctypedef statement")
         declarator = p_c_declarator(s, ctx, is_type = 1, nonempty = 1)
         s.expect_newline("Syntax error in ctypedef statement")
-        visibility = 'private'
-        if ctx.extern:
-            visibility = 'extern'
-        elif ctx.c_visibility != 'private':
-            visibility = ctx.c_visibility
         return Nodes.CTypeDefNode(
-            pos, base_type = base_type,
-            declarator = declarator, visibility = visibility,
+            pos, base_type = base_type, declarator = declarator,
+            extern = ctx.extern, visibility = ctx.visibility,
+            c_visibility = ctx.c_visibility,
             in_pxd = ctx.level == 'module_pxd')
 
 def p_decorators(s):

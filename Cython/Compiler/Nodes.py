@@ -1157,10 +1157,12 @@ class CTypeDefNode(StatNode):
     def analyse_declarations(self, env):
         base = self.base_type.analyse(env)
         name_declarator, type = self.declarator.analyse(base, env)
-        name = name_declarator.name
-        cname = name_declarator.cname
-        entry = env.declare_typedef(name, type, self.pos,
-            cname = cname, visibility = self.visibility)
+        binding = Binding()
+        binding.pull(self)
+        binding.name = name_declarator.name
+        binding.cname = name_declarator.cname
+        entry = env.WTK_declare_typedef(
+            binding, base_type = type, pos = self.pos)
         if self.in_pxd and not env.in_cinclude:
             entry.defined_in_pxd = 1
 
