@@ -2549,22 +2549,26 @@ def p_c_enum_definition(s, pos, ctx):
     items = None
     s.expect(':')
     items = []
+    # Work around overloading of the 'public' keyword.
+    item_ctx = ctx()
+    if item_ctx.c_visibility == 'public':
+        item_ctx.c_visibility = 'public'
+        item_ctx.visibility = 'public'
+    else:
+        item_ctx.c_visibility = 'public'
+        item_ctx.visibility = 'private'
     if s.sy != 'NEWLINE':
-        p_c_enum_line(s, ctx, items)
+        p_c_enum_line(s, item_ctx, items)
     else:
         s.next() # 'NEWLINE'
         s.expect_indent()
         while s.sy not in ('DEDENT', 'EOF'):
-            p_c_enum_line(s, ctx, items)
+            p_c_enum_line(s, item_ctx, items)
         s.expect_dedent()
-    visibility = 'private'
-    if ctx.extern:
-        visibility = 'extern'
-    elif ctx.c_visibility != 'private':
-        visibility = ctx.c_visibility
     return Nodes.CEnumDefNode(
         pos, name = name, cname = cname, items = items,
-        typedef_flag = ctx.typedef_flag, visibility = visibility,
+        typedef_flag = ctx.typedef_flag, extern = ctx.extern,
+        c_visibility = ctx.c_visibility, visibility = ctx.visibility,
         in_pxd = ctx.level == 'module_pxd')
 
 def p_c_enum_line(s, ctx, items):
@@ -2594,14 +2598,10 @@ def p_c_enum_item(s, ctx, items):
     if s.sy == '=':
         s.next()
         value = p_test(s)
-    visibility = 'private'
-    if ctx.extern:
-        visibility = 'extern'
-    elif ctx.c_visibility != 'private':
-        visibility = ctx.c_visibility
     items.append(Nodes.CEnumDefItemNode(pos,
         name = name, cname = cname, value = value,
-        visibility = visibility,
+        extern = ctx.extern, visibility = ctx.visibility,
+        c_visibility = ctx.c_visibility,
         in_pxd = ctx.level == 'module_pxd'))
 
 

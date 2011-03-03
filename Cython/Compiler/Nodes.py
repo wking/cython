@@ -1079,20 +1079,23 @@ class CppClassNode(CStructOrUnionDefNode):
                 attr.analyse_declarations(scope)
 
 class CEnumDefNode(StatNode):
-    #  name           string or None
-    #  cname          string or None
+    #  name           (same as Binding.name)
+    #  cname          (same as Binding.cname)
     #  items          [CEnumDefItemNode]
     #  typedef_flag   boolean
-    #  visibility     "public" or "private"
+    #  extern         (same meaning as Binding.extern)
+    #  c_visibility   (same as Binding.c_visibility)
+    #  visibility     (same as Binding.visibility)
     #  in_pxd         boolean
     #  entry          Entry
 
     child_attrs = ["items"]
 
     def analyse_declarations(self, env):
-        self.entry = env.declare_enum(self.name, self.pos,
-            cname = self.cname, typedef_flag = self.typedef_flag,
-            visibility = self.visibility)
+        binding = Binding()
+        binding.pull(self)
+        self.entry = env.WTK_declare_enum(
+            binding, typedef_flag = self.typedef_flag, pos = self.pos)
         if self.items is not None:
             if self.in_pxd and not env.in_cinclude:
                 self.entry.defined_in_pxd = 1
@@ -1106,6 +1109,8 @@ class CEnumDefNode(StatNode):
         if self.visibility == 'public':
             temp = code.funcstate.allocate_temp(PyrexTypes.py_object_type, manage_ref=True)
             for item in self.entry.enum_values:
+                if item.visibility == 'private':
+                    continue
                 code.putln("%s = PyInt_FromLong(%s); %s" % (
                         temp,
                         item.cname,
@@ -1121,8 +1126,8 @@ class CEnumDefNode(StatNode):
 
 
 class CEnumDefItemNode(StatNode):
-    #  name     string
-    #  cname    string or None
+    #  name           (same as Binding.name)
+    #  cname          (same as Binding.cname)
     #  value    ExprNode or None
 
     child_attrs = ["value"]
@@ -1133,14 +1138,11 @@ class CEnumDefItemNode(StatNode):
             if not self.value.type.is_int:
                 self.value = self.value.coerce_to(PyrexTypes.c_int_type, env)
                 self.value.analyse_const_expression(env)
-        visibility = 'private'
-        if enum_entry.extern:
-            visibility = 'extern'
-        elif enum_entry.c_visibility != 'private':
-            visibility = enum_entry.c_visibility
-        entry = env.declare_const(self.name, enum_entry.type,
-            self.value, self.pos, cname = self.cname,
-            visibility = visibility)
+        binding = Binding()
+        binding.pull(self)
+        entry = env.WTK_declare_const(
+            binding, type = enum_entry.type,
+            value = self.value, pos = self.pos)
         enum_entry.enum_values.append(entry)
 
 
