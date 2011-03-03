@@ -1102,7 +1102,7 @@ class CEnumDefNode(StatNode):
     def analyse_declarations(self, env):
         binding = Binding()
         binding.pull(self)
-        self.entry = env.WTK_declare_enum(
+        self.entry = env.declare_enum(
             binding, typedef_flag = self.typedef_flag, pos = self.pos)
         if self.items is not None:
             if self.in_pxd and not env.in_cinclude:
@@ -1547,7 +1547,8 @@ class FuncDefNode(StatNode, BlockNode):
         elif not arg.type.is_complete() and not arg.type.is_array:
             error(arg.pos,
                 "Argument type '%s' is incomplete" % arg.type)
-        return env.declare_arg(arg.name, arg.type, arg.pos)
+        binding = Binding(name = arg.name)
+        return env.declare_arg(binding, type = arg.type, pos = arg.pos)
 
     def generate_arg_type_test(self, arg, code):
         # Generate type test for one argument.
@@ -3290,7 +3291,7 @@ class CClassDefNode(ClassDefNode):
         if self.shadow:
             home_scope.lookup(self.class_name).as_variable = self.entry
         if home_scope is not env and self.extern:
-            env.add_imported_entry(self.class_name, self.entry, self.pos)
+            env.add_imported_entry(self.entry, self.class_name, pos = self.pos)
         self.scope = scope = self.entry.type.scope
         if scope is not None:
             scope.directives = env.directives
@@ -3337,7 +3338,8 @@ class PropertyNode(StatNode):
     child_attrs = ["body"]
 
     def analyse_declarations(self, env):
-        entry = env.declare_property(self.name, self.doc, self.pos)
+        binding = Binding(name = self.name)
+        entry = env.declare_property(binding, self.doc, pos = self.pos)
         if entry:
             entry.scope.directives = env.directives
             self.body.analyse_declarations(entry.scope)
@@ -5232,15 +5234,16 @@ class CImportStatNode(StatNode):
             module_scope = top_module_scope
             for name in names[1:]:
                 submodule_scope = module_scope.find_submodule(name)
-                module_scope.declare_module(name, submodule_scope, self.pos)
+                module_scope.declare_module(
+                    submodule_scope, name, pos = self.pos)
                 module_scope = submodule_scope
             if self.as_name:
-                env.declare_module(self.as_name, module_scope, self.pos)
+                env.declare_module(module_scope, self.as_name, pos = self.pos)
             else:
-                env.declare_module(top_name, top_module_scope, self.pos)
+                env.declare_module(top_module_scope, top_name, pos = self.pos)
         else:
             name = self.as_name or self.module_name
-            env.declare_module(name, module_scope, self.pos)
+            env.declare_module(module_scope, name, pos = self.pos)
 
     def analyse_expressions(self, env):
         pass
@@ -5266,7 +5269,7 @@ class FromCImportStatNode(StatNode):
         for pos, name, as_name, kind in self.imported_names:
             if name == "*":
                 for local_name, entry in module_scope.entries.items():
-                    env.add_imported_entry(local_name, entry, pos)
+                    env.add_imported_entry(entry, local_name, pos = pos)
             else:
                 entry = module_scope.lookup(name)
                 if entry:
@@ -5282,14 +5285,15 @@ class FromCImportStatNode(StatNode):
                     else:
                         submodule_scope = env.context.find_module(name, relative_to = module_scope, pos = self.pos)
                         if submodule_scope.parent_module is module_scope:
-                            env.declare_module(as_name or name, submodule_scope, self.pos)
+                            env.declare_module(
+                                submodule_scope, as_name or name, pos = self.pos)
                         else:
                             error(pos, "Name '%s' not declared in module '%s'"
                                 % (name, self.module_name))
 
                 if entry:
                     local_name = as_name or name
-                    env.add_imported_entry(local_name, entry, pos)
+                    env.add_imported_entry(entry, local_name, pos = pos)
 
     def declaration_matches(self, entry, kind):
         if not entry.is_type:

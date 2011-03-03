@@ -552,13 +552,7 @@ class Scope(object):
             error(pos, "%s '%s' previously declared as '%s'" % (
                     type_name, entry.name, vis_diff))
 
-    def declare_enum(self, name, pos, cname, typedef_flag,
-            visibility = 'private'):
-        binding = self._WTK_setup(name, cname, visibility=visibility)
-        return self.WTK_declare_enum(binding, pos, typedef_flag)
-
-    def WTK_declare_enum(self, binding, pos,
-                         typedef_flag):
+    def declare_enum(self, binding, typedef_flag, pos = None):
         if binding.name:
             if not binding.cname:
                 if self.in_cinclude or binding.c_visibility == 'public':
@@ -607,12 +601,7 @@ class Scope(object):
     def WTK_declare_builtin(self, binding, pos):
         return self.outer_scope.WTK_declare_builtin(binding, pos)
 
-    def _declare_pyfunction(self, name, pos, visibility='extern', entry=None):
-        binding = self._WTK_setup(name, name, visibility)
-        return self.WTK__declare_pyfunction(binding, entry, pos = pos)
-
-    def WTK__declare_pyfunction(self, binding,
-                                entry = None, pos = None):
+    def _declare_pyfunction(self, binding, entry = None, pos = None):
         if entry and not entry.type.is_cfunction:
             error(pos, "'%s' already declared" % binding.name)
             error(entry.pos, "Previous declaration is here")
@@ -630,15 +619,17 @@ class Scope(object):
         # Add an entry for a Python function.
         entry = self.lookup_here(binding.name)
         if not allow_redefine or Options.disable_function_redefinition:
-            return self.WTK__declare_pyfunction(
-                binding, entry = entry, pos = pos)
+            binding.extern = 1
+            binding.c_visibility = binding.visibility = 'public'
+            return self._declare_pyfunction(binding, entry = entry, pos = pos)
         if entry:
             if entry.type.is_unspecified:
                 entry.type = py_object_type
             elif entry.type is not py_object_type:
-                return self.WTK__declare_pyfunction(
-                    binding, entry = entry,
-                    pos = pos)
+                binding.extern = 1
+                binding.c_visibility = binding.visibility = 'public'
+                return self._declare_pyfunction(
+                    binding, entry = entry, pos = pos)
         else: # declare entry stub
             self.WTK_declare_var(
                 binding, py_object_type, pos = pos)
@@ -1117,10 +1108,7 @@ class ModuleScope(Scope):
             for m in scope.cimported_modules:
                 self.add_imported_module(m)
 
-    def add_imported_entry(self, name, entry, pos):
-        return self.WTK_add_imported_entry(entry, pos, as_name=name)
-
-    def WTK_add_imported_entry(self, entry, pos, as_name=None):
+    def add_imported_entry(self, entry, as_name = None, pos = None):
         if not as_name:
             as_name = entry.name
         if entry not in self.entries:
@@ -1128,10 +1116,7 @@ class ModuleScope(Scope):
         else:
             warning(pos, "'%s' redeclared  " % entry.name, 0)
 
-    def declare_module(self, name, scope, pos):
-        return self.WTK_declare_module(scope, pos, as_name=name)
-
-    def WTK_declare_module(self, scope, pos, as_name=None):
+    def declare_module(self, scope, as_name = None, pos = None):
         # Declare a cimported module. This is represented as a
         # Python module-level variable entry with a module
         # scope attached to it. Reports an error and returns
@@ -1468,14 +1453,10 @@ class LocalScope(Scope):
     def mangle(self, prefix, name):
         return prefix + name
 
-    def declare_arg(self, name, type, pos):
-        binding = self._WTK_setup(name, None, 'private')
-        binding.cname = self.mangle(Naming.var_prefix, binding.name)
-        return self.WTK_declare_arg(
-            binding, type, pos = pos)
-
-    def WTK_declare_arg(self, binding, type, pos = None):
+    def declare_arg(self, binding, type, pos = None):
         # Add an entry for an argument of a function.
+        if binding.cname is None:
+            binding.cname = self.mangle(Naming.var_prefix, binding.name)
         entry = self.WTK_declare(binding, type, pos = pos)
         entry.is_variable = 1
         if type.is_pyobject:
@@ -1941,12 +1922,7 @@ class CClassScope(ClassScope):
         entry.as_variable = var_entry
         return entry
 
-    def declare_property(self, name, doc, pos):
-        binding = self._WTK_setup(name, name, 'private')
-        return self.WTK_declare_property(binding, doc, pos = pos)
-
-    def WTK_declare_property(
-        self, binding, doc, pos = None):
+    def declare_property(self, binding, doc, pos = None):
         entry = self.lookup_here(binding.name)
         if entry is None:
             entry = self.WTK_declare(binding, py_object_type, pos = pos)
