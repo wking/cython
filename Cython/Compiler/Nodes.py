@@ -3082,7 +3082,7 @@ class PyClassDefNode(ClassDefNode):
             return None
 
         return CClassDefNode(self.pos,
-                             extern = 'false',
+                             extern = 0,
                              c_visibility = 'private',
                              visibility = 'public',
                              module_name = None,
