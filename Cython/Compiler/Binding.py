@@ -104,4 +104,12 @@ class PythonBinding(_BindingAttributes):
 
 class Binding(CSource, CBinding, PythonBinding):
     "Combine all binding attributes in a single, flat namespace."
-    pass
+    def visibility_string(self):
+        "Summarize binding visibility in a single string"
+        if self.extern:
+            extern_string = ' (extern)'
+        else:
+            extern_string = ''
+        return 'C: %s%s, Python: %s' % (
+            self.c_visibility, extern_string, self.visibility)
+            

@@ -2946,7 +2946,7 @@ def p_c_class_definition(s, pos,  ctx, decorators=None):
         if ctx.api:
             error(pos, "Only 'public' C class can be declared 'api'")
     else:
-        error(pos, "Invalid class visibility '%s'" % visibility)
+        error(pos, "Invalid class visibility '%s'" % ctx.visibility_string())
     return Nodes.CClassDefNode(pos,
         extern = ctx.extern,
         c_visibility = ctx.c_visibility,
