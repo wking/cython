@@ -1074,7 +1074,7 @@ class CppClassNode(CStructOrUnionDefNode):
             template_types = [PyrexTypes.TemplatePlaceholderType(template_name) for template_name in self.templates]
         binding = Binding()
         binding.pull(self)
-        self.entry = env.WTK_declare_cpp_class(
+        self.entry = env.declare_cpp_class(
             binding, scope = scope, base_classes = base_class_types,
             templates = template_types, pos = self.pos)
         if self.entry is None:
@@ -1148,7 +1148,7 @@ class CEnumDefItemNode(StatNode):
                 self.value.analyse_const_expression(env)
         binding = Binding()
         binding.pull(self)
-        entry = env.WTK_declare_const(
+        entry = env.declare_const(
             binding, type = enum_entry.type,
             value = self.value, pos = self.pos)
         enum_entry.enum_values.append(entry)

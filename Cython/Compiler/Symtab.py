@@ -385,12 +385,7 @@ class Scope(object):
     def qualify_name(self, name):
         return EncodedString("%s.%s" % (self.qualified_name, name))
 
-    def declare_const(self, name, type, value, pos, cname = None, visibility = 'private'):
-        binding = self._WTK_setup(name, cname, visibility)
-        return self.WTK_declare_const(binding, type, value, pos = pos)
-
-    def WTK_declare_const(self, binding,
-                          type, value, pos):
+    def declare_const(self, binding, type, value, pos):
         # Add an entry for a named constant.
         if not binding.cname:
             if self.in_cinclude or binding.c_visibility == 'public':
@@ -403,13 +398,8 @@ class Scope(object):
         entry.value_node = value
         return entry
 
-    def declare_type(self, name, type, pos,
-            cname = None, visibility = 'private', defining = 1, shadow = 0):
-        binding = self._WTK_setup(name, cname, visibility)
-        return self.WTK_declare_type(binding, type, defining, shadow, pos)
-
-    def WTK_declare_type(self, binding,
-                         type, defining = 1, shadow = 0, pos = None):
+    def declare_type(self, binding, type, defining = 1, shadow = 0,
+                     pos = None):
         # Add an entry for a type definition.
         if not binding.cname:
             binding.cname = binding.name
@@ -440,7 +430,7 @@ class Scope(object):
         except ValueError, e:
             error(pos, e.args[0])
             type = PyrexTypes.error_type
-        entry = self.WTK_declare_type(
+        entry = self.declare_type(
             binding, type, pos = pos)
         type.qualified_name = entry.qualified_name
         return entry
@@ -466,7 +456,7 @@ class Scope(object):
             type = PyrexTypes.CStructOrUnionType(
                 binding.name, kind, scope, typedef_flag, binding.cname,
                 packed)
-            entry = self.WTK_declare_type(
+            entry = self.declare_type(
                 binding, type,
                 defining = scope is not None, pos = pos)
             self.sue_entries.append(entry)
@@ -481,8 +471,7 @@ class Scope(object):
                     binding.name, 0)
             else:
                 self.check_previous_typedef_flag(entry, typedef_flag, pos)
-                self.WTK_check_previous_visibility(
-                    entry, binding, pos = pos)
+                self.check_previous_visibility(entry, binding, pos = pos)
                 if scope:
                     entry.type.scope = scope
                     self.type_entries.append(entry)
@@ -490,14 +479,7 @@ class Scope(object):
             self.check_for_illegal_incomplete_ctypedef(typedef_flag, pos)
         return entry
 
-    def declare_cpp_class(self, name, scope,
-            pos, cname = None, base_classes = [],
-            visibility = 'extern', templates = None):
-        binding = self._WTK_setup(name, cname, visibility)
-        return self.WTK_declare_cpp_class(
-            binding, pos, scope, base_classes, templates)
-
-    def WTK_declare_cpp_class(
+    def declare_cpp_class(
         self, binding,
         pos, scope, base_classes = (), templates = None):
         if not binding.extern:
@@ -509,7 +491,7 @@ class Scope(object):
             type = PyrexTypes.CppClassType(
                 binding.name, scope, binding.cname, base_classes,
                 templates = templates)
-            entry = self.WTK_declare_type(
+            entry = self.declare_type(
                 binding, type,
                 defining = scope is not None, pos = pos)
         else:
@@ -547,11 +529,7 @@ class Scope(object):
                 entry.name,
                 ("cdef", "ctypedef")[entry.type.typedef_flag]))
 
-    def _check_previous_visibility(self, entry, visibility):
-        binding = self._WTK_setup('dummy', 'dummy', visibility)
-        return self.WTK__check_previous_visibility(entry, binding)
-
-    def WTK__check_previous_visibility(self, entry, binding):
+    def _check_previous_visibility(self, entry, binding):
         # Compare the visibility of `entry` with a second
         # `visibility`.  If there is a difference, return a string
         # representing the conflicting `entry` visibility, otherwise
@@ -563,17 +541,11 @@ class Scope(object):
         if binding.visibility != entry.visibility:
             return entry.visibility
 
-    def check_previous_visibility(self, entry, visibility, pos,
-                                  type_name=None):
-        binding = self._WTK_setup('dummy', 'dummy', visibility)
-        return self.WTK_check_previous_visibility(entry, binding, pos, type_name)
-
-    def WTK_check_previous_visibility(
-        self, entry, binding,
-        type_name=None, pos = None):
+    def check_previous_visibility(self, entry, binding, type_name=None,
+                                  pos = None):
         # WTK: check api?  Previous code seems to allow you to set the
         # api flag anywhere.
-        vis_diff = self.WTK__check_previous_visibility(entry, binding)
+        vis_diff = self._check_previous_visibility(entry, binding)
         if vis_diff:
             if not type_name:
                 type_name = type(entry)
@@ -598,7 +570,7 @@ class Scope(object):
                 binding.name, binding.cname, typedef_flag)
         else:
             type = PyrexTypes.c_anon_enum_type
-        entry = self.WTK_declare_type(binding, type, pos = pos)
+        entry = self.declare_type(binding, type, pos = pos)
         entry.enum_values = []
         self.sue_entries.append(entry)
         return entry
@@ -720,8 +692,7 @@ class Scope(object):
                     Naming.func_prefix, binding.name)
         entry = self.lookup_here(binding.name)
         if entry:
-            vis_diff = self.WTK__check_previous_visibility(
-                entry, binding)
+            vis_diff = self._check_previous_visibility(entry, binding)
             if vis_diff:
                 warning(pos, "Function '%s' previously declared as '%s'" % (
                         binding.name, vis_diff), 1)
@@ -740,7 +711,7 @@ class Scope(object):
                         else:
                             can_override = True
                     if can_override:
-                        temp = self.WTK_add_cfunction(binding, pos, type, modifiers)
+                        temp = self.add_cfunction(binding, pos, type, modifiers)
                         temp.overloaded_alternatives = entry.all_alternatives()
                         entry = temp
                     else:
@@ -750,7 +721,7 @@ class Scope(object):
                     print 'EE', entry, binding.extern, entry.extern
                     error(pos, "Function signature does not match previous declaration")
         else:
-            entry = self.WTK_add_cfunction(binding, pos, type, modifiers)
+            entry = self.add_cfunction(binding, pos, type, modifiers)
             entry.func_cname = binding.cname
         if in_pxd and not binding.extern:
             entry.defined_in_pxd = 1
@@ -764,11 +735,7 @@ class Scope(object):
         entry.utility_code = utility_code
         return entry
 
-    def add_cfunction(self, name, type, pos, cname, visibility, modifiers):
-        binding = self._WTK_setup(name, cname, visibility)
-        return self.WTK_add_cfunction(binding, pos, type, modifiers)
-
-    def WTK_add_cfunction(self, binding, pos, type,
+    def add_cfunction(self, binding, pos, type,
                           modifiers = ()):
         # Add a C function entry without giving it a func_cname.
         entry = self.WTK_declare(binding, type, pos = pos)
@@ -960,7 +927,7 @@ class BuiltinScope(Scope):
             scope.directives['final'] = True
         type.set_scope(scope)
         self.type_names[binding.name] = 1
-        entry = self.WTK_declare_type(binding, type)
+        entry = self.declare_type(binding, type)
         entry.utility_code = utility_code
 
         var_entry = WTK_Entry(
@@ -1293,7 +1260,7 @@ class ModuleScope(Scope):
                 type.module_name = self.qualified_name
             type.typeptr_cname = self.mangle(
                 Naming.typeptr_prefix, binding.name)
-            entry = self.WTK_declare_type(
+            entry = self.declare_type(
                 binding, type, defining = 0, shadow = shadow, pos = pos)
             entry.is_cclass = True
             if objstruct_cname:
@@ -1336,9 +1303,8 @@ class ModuleScope(Scope):
             entry.defined_in_pxd = 1
         if implementing:   # So that filenames in runtime exceptions refer to
             entry.pos = pos  # the .pyx file and not the .pxd file
-        self.WTK_check_previous_visibility(
-            entry, binding, type_name='Class',
-            pos = pos)
+        self.check_previous_visibility(
+            entry, binding, type_name = 'Class', pos = pos)
         if objstruct_cname:
             if (type.objstruct_cname and
                 type.objstruct_cname != objstruct_cname):
@@ -1925,7 +1891,7 @@ class CClassScope(ClassScope):
                     binding.extern = 0
                     binding.c_visibility = 'ignore'
                     binding.visibility = 'public'
-                    entry = self.WTK_add_cfunction(binding, pos, type, modifiers)
+                    entry = self.add_cfunction(binding, pos, type, modifiers)
                     defining = 1
                 else:
                     error(pos, "Signature not compatible with previous declaration")
@@ -1937,21 +1903,17 @@ class CClassScope(ClassScope):
                     " extension type" % binding.name)
             if not binding.cname:
                 binding.cname = binding.name
-            entry = self.WTK_add_cfunction(binding, pos, type, modifiers)
+            entry = self.add_cfunction(binding, pos, type, modifiers)
         if defining:
             entry.func_cname = self.mangle(Naming.func_prefix, binding.name)
         entry.utility_code = utility_code
         return entry
 
-    def add_cfunction(self, name, type, pos, cname, visibility, modifiers):
-        binding = self._WTK_setup(name, cname, visibility)
-        return self.WTK_add_cfunction(binding, pos, type, modifiers)
-
-    def WTK_add_cfunction(self, binding, pos, type,
+    def add_cfunction(self, binding, pos, type,
                           modifiers = ()):
         # Add a C function entry without giving it a func_cname.
         prev_entry = self.lookup_here(binding.name)
-        entry = ClassScope.WTK_add_cfunction(self, binding, pos, type, modifiers)
+        entry = ClassScope.add_cfunction(self, binding, pos, type, modifiers)
         entry.is_cmethod = 1
         entry.prev_entry = prev_entry
         return entry
@@ -2015,7 +1977,7 @@ class CClassScope(ClassScope):
             binding = Binding()
             binding.pull(base_entry)
             binding.cname = adapt(base_entry.cname)
-            entry = self.WTK_add_cfunction(
+            entry = self.add_cfunction(
                 binding, type = base_entry.type,
                 modifiers = base_entry.func_modifiers,
                 pos = base_entry.pos)
@@ -2138,9 +2100,10 @@ class CppClassScope(Scope):
             if entry.is_type:
                 binding = Binding()
                 binding.pull(entry)
-                scope.WTK_declare_type(
+                scope.declare_type(
                     binding,
-                    type = entry.type.specialize(values), pos = entry.pos)
+                    type = entry.type.specialize(values),
+                    pos = entry.pos)
             else:
 #                binding = Binding()
 #                binding.pull(entry)
