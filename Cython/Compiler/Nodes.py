@@ -3082,7 +3082,9 @@ class PyClassDefNode(ClassDefNode):
             return None
 
         return CClassDefNode(self.pos,
-                             visibility = 'private',
+                             extern = 'false',
+                             c_visibility = 'private',
+                             visibility = 'public',
                              module_name = None,
                              class_name = self.name,
                              base_class_module = base_class_module,
@@ -3149,9 +3151,11 @@ class PyClassDefNode(ClassDefNode):
 class CClassDefNode(ClassDefNode):
     #  An extension type definition.
     #
-    #  visibility         'private' or 'public' or 'extern'
+    #  extern             (same as Binding.extern)
+    #  c_visibility       (same as Binding.c_visibility)
+    #  visibility         (same as Binding.visibility)
     #  typedef_flag       boolean
-    #  api                boolean
+    #  api                (same as Binding.api)
     #  module_name        string or None    For import of extern type objects
     #  class_name         string            Unqualified name of class
     #  as_name            string or None    Name to declare as in this scope
@@ -3240,7 +3244,7 @@ class CClassDefNode(ClassDefNode):
                     else:
                         self.base_type = base_class_entry.type
         has_body = self.body is not None
-        if self.module_name and self.visibility != 'extern':
+        if self.module_name and not self.extern:
             module_path = self.module_name.split(".")
             home_scope = env.find_imported_module(module_path, self.pos)
             if not home_scope:
@@ -3248,26 +3252,27 @@ class CClassDefNode(ClassDefNode):
         else:
             home_scope = env
 
-        if self.visibility == 'extern':
+        if self.extern:
             if (self.module_name == '__builtin__' and
                 self.class_name in Builtin.builtin_types and
                 env.qualified_name[:8] != 'cpython.'): # allow overloaded names for cimporting from cpython
                 warning(self.pos, "%s already a builtin Cython type" % self.class_name, 1)
 
-        self.entry = home_scope.declare_c_class(
-            name = self.class_name,
-            pos = self.pos,
+        binding = Binding()
+        binding.pull(self)
+        binding.name = self.class_name
+        self.entry = home_scope.WTK_declare_c_class(
+            binding, 
+            objstruct_cname = self.objstruct_name,
+            base_type = self.base_type,
             defining = has_body and self.in_pxd,
             implementing = has_body and not self.in_pxd,
             module_name = self.module_name,
-            base_type = self.base_type,
-            objstruct_cname = self.objstruct_name,
             typeobj_cname = self.typeobj_name,
-            visibility = self.visibility,
             typedef_flag = self.typedef_flag,
-            api = self.api,
-            buffer_defaults = buffer_defaults)
-        if home_scope is not env and self.visibility == 'extern':
+            buffer_defaults = buffer_defaults,
+            pos = self.pos)
+        if home_scope is not env and self.extern:
             env.add_imported_entry(self.class_name, self.entry, self.pos)
         self.scope = scope = self.entry.type.scope
         if scope is not None:

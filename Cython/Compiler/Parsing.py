@@ -2932,11 +2932,6 @@ def p_c_class_definition(s, pos,  ctx, decorators=None):
         s.expect_newline("Syntax error in C class definition")
         doc = None
         body = None
-    visibility = 'private'
-    if ctx.extern:
-        visibility = 'extern'
-    elif ctx.c_visibility != 'private':
-        visibility = ctx.c_visibility
     if ctx.extern:
         if not module_path:
             error(pos, "Module name required for 'extern' C class")
@@ -2953,7 +2948,9 @@ def p_c_class_definition(s, pos,  ctx, decorators=None):
     else:
         error(pos, "Invalid class visibility '%s'" % visibility)
     return Nodes.CClassDefNode(pos,
-        visibility = visibility,
+        extern = ctx.extern,
+        c_visibility = ctx.c_visibility,
+        visibility = ctx.visibility,
         typedef_flag = ctx.typedef_flag,
         api = ctx.api,
         module_name = ".".join(module_path),
