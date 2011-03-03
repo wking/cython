@@ -2016,15 +2016,13 @@ class CClassScope(ClassScope):
                 entry.is_variable = 1
                 self.inherited_var_entries.append(entry)
         for base_entry in base_scope.cfunc_entries:
-            visibility = 'private'
-            if base_entry.extern:
-                visibility = 'extern'
-            elif base_entry.c_visibility != 'private':
-                visibility = base_entry.c_visibility
-            entry = self.add_cfunction(
-                base_entry.name, base_entry.type,
-                base_entry.pos, adapt(base_entry.cname),
-                visibility, base_entry.func_modifiers)
+            binding = Binding()
+            binding.pull(base_entry)
+            binding.cname = adapt(base_entry.cname)
+            entry = self.WTK_add_cfunction(
+                binding, type = base_entry.type,
+                modifiers = base_entry.func_modifiers,
+                pos = base_entry.pos)
             entry.is_inherited = 1
 
 
@@ -2129,16 +2127,13 @@ class CppClassScope(Scope):
                 entry.is_variable = 1
                 self.inherited_var_entries.append(entry)
         for base_entry in base_scope.cfunc_entries:
-            visibility = 'private'
-            if base_entry.extern:
-                visibility = 'extern'
-            elif base_entry.c_visibility != 'private':
-                visibility = base_entry.c_visibility
-            entry = self.declare_cfunction(
-                base_entry.name, base_entry.type,
-                base_entry.pos, base_entry.cname,
-                visibility, base_entry.func_modifiers,
-                utility_code = base_entry.utility_code)
+            binding = Binding()
+            binding.pull(base_entry)
+            entry = self.WTK_declare_cfunction(
+                binding, type = base_entry.type,
+                modifiers = base_entry.func_modifiers,
+                utility_code = base_entry.utility_code,
+                pos = base_entry.pos)
             entry.is_inherited = 1
 
     def specialize(self, values):
