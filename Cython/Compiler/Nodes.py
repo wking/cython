@@ -649,6 +649,9 @@ class CArgDeclNode(Node):
     is_self_arg = 0
     is_type_arg = 0
     is_generic = 1
+    kw_only = 0
+    not_none = 0
+    or_none = 0
     type = None
     name_declarator = None
     default_value = None
@@ -734,6 +737,9 @@ class CSimpleBaseTypeNode(CBaseTypeNode):
 
     child_attrs = []
     arg_name = None   # in case the argument name was interpreted as a type
+    module_path = []
+    is_basic_c_type = False
+    complex = False
 
     def analyse(self, env, could_be_name = False):
         # Return type descriptor.
@@ -1071,6 +1077,8 @@ class CppClassNode(CStructOrUnionDefNode):
         self.entry = env.WTK_declare_cpp_class(
             binding, scope = scope, base_classes = base_class_types,
             templates = template_types, pos = self.pos)
+        if self.entry is None:
+            return
         self.entry.is_cpp_class = 1
         if self.attributes is not None:
             if self.in_pxd and not env.in_cinclude:
@@ -1921,6 +1929,9 @@ class DefNode(FuncDefNode):
     entry = None
     acquire_gil = 0
     self_in_stararg = 0
+    star_arg = None
+    starstar_arg = None
+    doc = None
 
     def __init__(self, pos, **kwds):
         FuncDefNode.__init__(self, pos, **kwds)
@@ -2302,6 +2313,8 @@ class DefNode(FuncDefNode):
                     arg_code_list.append(
                         arg.hdr_type.declaration_code(arg.hdr_cname))
         if not self.entry.is_special and sig.method_flags() == [TypeSlots.method_noargs]:
+            arg_code_list.append("CYTHON_UNUSED PyObject *unused")
+        if (self.entry.scope.is_c_class_scope and self.entry.name == "__ipow__"):
             arg_code_list.append("CYTHON_UNUSED PyObject *unused")
         if sig.has_generic_args:
             arg_code_list.append(
@@ -3180,6 +3193,7 @@ class CClassDefNode(ClassDefNode):
     objstruct_name = None
     typeobj_name = None
     decorators = None
+    shadow = False
 
     def analyse_declarations(self, env):
         #print "CClassDefNode.analyse_declarations:", self.class_name
@@ -3271,7 +3285,10 @@ class CClassDefNode(ClassDefNode):
             typeobj_cname = self.typeobj_name,
             typedef_flag = self.typedef_flag,
             buffer_defaults = buffer_defaults,
+            shadow = self.shadow,
             pos = self.pos)
+        if self.shadow:
+            home_scope.lookup(self.class_name).as_variable = self.entry
         if home_scope is not env and self.extern:
             env.add_imported_entry(self.class_name, self.entry, self.pos)
         self.scope = scope = self.entry.type.scope
@@ -4368,7 +4385,12 @@ class ForInStatNode(LoopNode, StatNode):
         self.target.analyse_target_types(env)
         self.iterator.analyse_expressions(env)
         self.item = ExprNodes.NextNode(self.iterator, env)
-        self.item = self.item.coerce_to(self.target.type, env)
+        if (self.iterator.type.is_ptr or self.iterator.type.is_array) and \
+            self.target.type.assignable_from(self.iterator.type):
+            # C array slice optimization.
+            pass
+        else:
+            self.item = self.item.coerce_to(self.target.type, env)
         self.body.analyse_expressions(env)
         if self.else_clause:
             self.else_clause.analyse_expressions(env)

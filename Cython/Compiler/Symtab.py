@@ -335,7 +335,7 @@ class Scope(object):
         # Return the module-level scope containing this scope.
         return self.outer_scope.builtin_scope()
 
-    def WTK_declare(self, binding, type, pos):
+    def WTK_declare(self, binding, type, shadow = 0, pos = None):
         # Create new entry, and add to dictionary if
         # name is not None. Reports a warning if already
         # declared.
@@ -346,7 +346,7 @@ class Scope(object):
             # See http://www.gnu.org/software/libc/manual/html_node/Reserved-Names.html#Reserved-Names
             warning(pos, "'%s' is a reserved name in C." % binding.cname, -1)
         entries = self.entries
-        if binding.name and binding.name in entries:
+        if binding.name and binding.name in entries and not shadow:
             if binding.extern:
                 warning(pos, "'%s' redeclared " % binding.name, 0)
             elif binding.c_visibility != 'ignore':
@@ -360,7 +360,8 @@ class Scope(object):
 #                    entry)
 #            else:
 #                entries[binding.name] = entry
-            entries[binding.name] = entry
+            if not shadow:
+                 entries[binding.name] = entry
         entry.scope = self
         return entry
 
@@ -377,16 +378,16 @@ class Scope(object):
                 binding.c_visibility = 'public'
         return binding
 
-    def declare(self, name, cname, type, pos, visibility):
+    def declare(self, name, cname, type, pos, visibility, shadow = 0):
         binding = self._WTK_setup(name, cname, visibility)
-        return self.WTK_declare(binding, type, pos)
+        return self.WTK_declare(binding, type, shadow = shadow, pos = pos)
 
     def qualify_name(self, name):
         return EncodedString("%s.%s" % (self.qualified_name, name))
 
     def declare_const(self, name, type, value, pos, cname = None, visibility = 'private'):
         binding = self._WTK_setup(name, cname, visibility)
-        return self.WTK_declare_const(binding, type, value, pos)
+        return self.WTK_declare_const(binding, type, value, pos = pos)
 
     def WTK_declare_const(self, binding,
                           type, value, pos):
@@ -397,22 +398,22 @@ class Scope(object):
             else:
                 binding.cname = self.mangle(
                     Naming.enum_prefix, binding.name)
-        entry = self.WTK_declare(binding, type, pos)
+        entry = self.WTK_declare(binding, type, pos = pos)
         entry.is_const = 1
         entry.value_node = value
         return entry
 
     def declare_type(self, name, type, pos,
-            cname = None, visibility = 'private', defining = 1):
+            cname = None, visibility = 'private', defining = 1, shadow = 0):
         binding = self._WTK_setup(name, cname, visibility)
-        return self.WTK_declare_type(binding, type, defining, pos)
+        return self.WTK_declare_type(binding, type, defining, shadow, pos)
 
     def WTK_declare_type(self, binding,
-                         type, defining = 1, pos = None):
+                         type, defining = 1, shadow = 0, pos = None):
         # Add an entry for a type definition.
         if not binding.cname:
             binding.cname = binding.name
-        entry = self.WTK_declare(binding, type, pos)
+        entry = self.WTK_declare(binding, type, shadow = shadow, pos = pos)
         entry.is_type = 1
         if defining:
             self.type_entries.append(entry)
@@ -513,7 +514,8 @@ class Scope(object):
                 defining = scope is not None, pos = pos)
         else:
             if not (entry.is_type and entry.type.is_cpp_class):
-                warning(pos, "'%s' redeclared  " % binding.name, 0)
+                error(pos, "'%s' redeclared " % binding.name)
+                return None
             elif scope and entry.type.scope:
                 warning(
                     pos, "'%s' already defined  (ignoring second definition)" %
@@ -620,7 +622,7 @@ class Scope(object):
             constructor = type.scope.lookup(u'<init>')
             if constructor is not None and PyrexTypes.best_match([], constructor.all_alternatives()) is None:
                 error(pos, "C++ class must have a default constructor to be stack allocated")
-        entry = self.WTK_declare(binding, type, pos)
+        entry = self.WTK_declare(binding, type, pos = pos)
         entry.is_variable = 1
         self.control_flow.set_state(
             (), (binding.name, 'initialized'), False)
@@ -769,7 +771,7 @@ class Scope(object):
     def WTK_add_cfunction(self, binding, pos, type,
                           modifiers = ()):
         # Add a C function entry without giving it a func_cname.
-        entry = self.WTK_declare(binding, type, pos)
+        entry = self.WTK_declare(binding, type, pos = pos)
         entry.is_cfunction = 1
         if modifiers:
             entry.func_modifiers = modifiers
@@ -875,7 +877,7 @@ class PreImportScope(Scope):
         return self.WTK_declare_builtin(binding, pos)
 
     def WTK_declare_builtin(self, binding, pos):
-        entry = self.WTK_declare(binding, py_object_type, pos)
+        entry = self.WTK_declare(binding, py_object_type, pos = pos)
         entry.is_variable = True
         entry.is_pyglobal = True
         return entry
@@ -1233,18 +1235,19 @@ class ModuleScope(Scope):
     def declare_c_class(self, name, pos, defining = 0, implementing = 0,
         module_name = None, base_type = None, objstruct_cname = None,
         typeobj_cname = None, visibility = 'private', typedef_flag = 0, api = 0,
-        buffer_defaults = None):
+        buffer_defaults = None, shadow = 0):
         binding = self._WTK_setup(name, objstruct_cname, visibility)
         binding.api = api
         return self.WTK_declare_c_class(
             binding, objstruct_cname, None, base_type, defining, implementing,
-            module_name, typeobj_cname, typedef_flag, buffer_defaults, pos)
+            module_name, typeobj_cname, typedef_flag, buffer_defaults, shadow,
+            pos)
 
     def WTK_declare_c_class(
         self, binding, objstruct_cname = None, type=None, base_type=None,
         defining = 0, implementing = 0, module_name = None,
         typeobj_cname = None, typedef_flag = 0, buffer_defaults = None,
-        pos = None):
+        shadow = 0, pos = None):
         # If this is a non-extern typedef class, expose the typedef, but use
         # the non-typedef struct internally to avoid needing forward
         # declarations for anonymous structs.
@@ -1259,7 +1262,7 @@ class ModuleScope(Scope):
         #  Look for previous declaration as a type
         #
         entry = self.lookup_here(binding.name)
-        if entry:
+        if entry and not shadow:
             type = entry.type
             if not (entry.is_type and type.is_extension_type):
                 entry = None # Will cause redeclaration and produce an error
@@ -1275,9 +1278,10 @@ class ModuleScope(Scope):
         #
         #  Make a new entry if needed
         #
-        if not entry:
+        if not entry or shadow:
             type = PyrexTypes.PyExtensionType(
-                binding.name, typedef_flag, base_type, binding.extern)
+                binding.name, typedef_flag, base_type,
+                is_external = binding.extern)
             type.pos = pos
             type.buffer_defaults = buffer_defaults
             if objtypedef_cname is not None:
@@ -1289,7 +1293,7 @@ class ModuleScope(Scope):
             type.typeptr_cname = self.mangle(
                 Naming.typeptr_prefix, binding.name)
             entry = self.WTK_declare_type(
-                binding, type, defining = 0, pos = pos)
+                binding, type, defining = 0, shadow = shadow, pos = pos)
             entry.is_cclass = True
             if objstruct_cname:
                 type.objstruct_cname = objstruct_cname
@@ -1674,7 +1678,7 @@ class StructOrUnionScope(Scope):
                 binding.cname = c_safe_identifier(binding.cname)
         if type.is_cfunction:
             type = PyrexTypes.CPtrType(type)
-        entry = self.WTK_declare(binding, type, pos)
+        entry = self.WTK_declare(binding, type, pos = pos)
         entry.is_variable = 1
         self.var_entries.append(entry)
         if type.is_pyobject and not allow_pyobject:
@@ -1822,7 +1826,7 @@ class CClassScope(ClassScope):
                     binding.cname = c_safe_identifier(binding.cname)
             if type.is_cpp_class and not binding.extern:
                 error(pos, "C++ classes not allowed as members of an extension type, use a pointer or reference instead")
-            entry = self.WTK_declare(binding, type, pos)
+            entry = self.WTK_declare(binding, type, pos = pos)
             entry.is_variable = 1
             self.var_entries.append(entry)
             if type.is_pyobject:
@@ -2049,7 +2053,7 @@ class CppClassScope(Scope):
             binding.cname = binding.name
         if type.is_cfunction:
             type = PyrexTypes.CPtrType(type)
-        entry = self.WTK_declare(binding, type, pos)
+        entry = self.WTK_declare(binding, type, pos = pos)
         entry.is_variable = 1
         self.var_entries.append(entry)
         if type.is_pyobject and not allow_pyobject:

@@ -1746,7 +1746,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         code.putln("#endif")
         code.putln("{")
         tempdecl_code = code.insertion_point()
-
+        
         code.putln("#if CYTHON_REFNANNY")
         code.putln("void* __pyx_refnanny = NULL;")
         code.putln("__Pyx_RefNanny = __Pyx_RefNannyImportAPI(\"refnanny\");")
@@ -1758,6 +1758,9 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         code.putln("}")
         code.putln("__pyx_refnanny = __Pyx_RefNanny->SetupContext(\"%s\", __LINE__, __FILE__);"% header3)
         code.putln("#endif")
+
+        env.use_utility_code(check_binary_version_utility_code)
+        code.putln("if ( __Pyx_check_binary_version() < 0) %s" % code.error_goto(self.pos))
 
         code.putln("%s = PyTuple_New(0); %s" % (Naming.empty_tuple, code.error_goto_if_null(Naming.empty_tuple, self.pos)));
         code.putln("%s = PyBytes_FromStringAndSize(\"\", 0); %s" % (Naming.empty_bytes, code.error_goto_if_null(Naming.empty_bytes, self.pos)));
@@ -2663,8 +2666,6 @@ int %(wmain_method)s(int argc, wchar_t **argv) {
 #else
 static int __Pyx_main(int argc, wchar_t **argv) {
 #endif
-    int r = 0;
-    PyObject* m = NULL;
     /* 754 requires that FP exceptions run in "no stop" mode by default,
      * and until C vendors implement C99's ways to control FP exceptions,
      * Python requires non-stop mode.  Alas, some platforms enable FP
@@ -2676,29 +2677,30 @@ static int __Pyx_main(int argc, wchar_t **argv) {
     m = fpgetmask();
     fpsetmask(m & ~FP_X_OFL);
 #endif
-    if (argc) {
+    if (argc && argv)
         Py_SetProgramName(argv[0]);
-    }
     Py_Initialize();
-    if (argc) {
+    if (argc && argv)
         PySys_SetArgv(argc, argv);
+    { /* init module '%(module_name)s' as '__main__' */
+      PyObject* m = NULL;
+      %(module_is_main)s = 1;
+      #if PY_MAJOR_VERSION < 3
+          init%(module_name)s();
+      #else
+          m = PyInit_%(module_name)s();
+      #endif
+      if (PyErr_Occurred()) {
+          PyErr_Print(); /* This exits with the right code if SystemExit. */
+          #if PY_MAJOR_VERSION < 3
+          if (Py_FlushLine()) PyErr_Clear();
+          #endif
+          return 1;
+      }
+      Py_XDECREF(m);
     }
-    %(module_is_main)s = 1;
-#if PY_MAJOR_VERSION < 3
-        init%(module_name)s();
-#else
-        m = PyInit_%(module_name)s();
-#endif
-    if (PyErr_Occurred() != NULL) {
-        r = 1;
-        PyErr_Print(); /* This exits with the right code if SystemExit. */
-#if PY_MAJOR_VERSION < 3
-        if (Py_FlushLine()) PyErr_Clear();
-#endif
-    }
-    Py_XDECREF(m);
     Py_Finalize();
-    return r;
+    return 0;
 }
 
 
@@ -2852,3 +2854,26 @@ packed_struct_utility_code = UtilityCode(proto="""
 #define __Pyx_PACKED
 #endif
 """, impl="", proto_block='utility_code_proto_before_types')
+
+check_binary_version_utility_code = UtilityCode(proto="""
+static int __Pyx_check_binary_version(void);
+""", impl="""
+static int __Pyx_check_binary_version(void) {
+    char ctversion[4], rtversion[4];
+    PyOS_snprintf(ctversion, 4, "%d.%d", PY_MAJOR_VERSION, PY_MINOR_VERSION);
+    PyOS_snprintf(rtversion, 4, "%s", Py_GetVersion());
+    if (ctversion[0] != rtversion[0] || ctversion[2] != rtversion[2]) {
+        char message[200];
+        PyOS_snprintf(message, sizeof(message),
+                      "compiletime version %s of module '%.100s' "
+                      "does not match runtime version %s",
+                      ctversion, __Pyx_MODULE_NAME, rtversion);
+        #if PY_VERSION_HEX < 0x02050000
+        return PyErr_Warn(NULL, message);
+        #else
+        return PyErr_WarnEx(NULL, message, 1);
+        #endif
+    }
+    return 0;
+}
+""")
