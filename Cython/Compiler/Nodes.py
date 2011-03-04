@@ -2190,7 +2190,9 @@ class DefNode(FuncDefNode):
         entry = env.lookup_here(name)
         if entry and entry.type.is_cfunction and not self.is_wrapper:
             warning(self.pos, "Overriding cdef method with def method.", 5)
-        entry = env.declare_pyfunction(name, self.pos, allow_redefine=not self.is_wrapper)
+        binding = Binding(name = name)
+        entry = env.declare_pyfunction(
+            binding, allow_redefine=not self.is_wrapper, pos = self.pos)
         self.entry = entry
         prefix = env.next_id(env.scope_prefix)
 

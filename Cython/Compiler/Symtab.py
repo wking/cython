@@ -610,12 +610,7 @@ class Scope(object):
         self.pyfunc_entries.append(entry)
         return entry
 
-    def declare_pyfunction(self, name, pos, allow_redefine=False, visibility='extern'):
-        binding = self._WTK_setup(name, None, visibility)
-        return self.WTK_declare_pyfunction(binding, allow_redefine, pos)
-
-    def WTK_declare_pyfunction(self, binding,
-                               allow_redefine = False, pos = None):
+    def declare_pyfunction(self, binding, allow_redefine = False, pos = None):
         # Add an entry for a Python function.
         entry = self.lookup_here(binding.name)
         if not allow_redefine or Options.disable_function_redefinition:
@@ -1591,13 +1586,8 @@ class ClosureScope(LocalScope):
 #        return "%s->%s" % (self.cur_scope_cname, name)
 #        return "%s->%s" % (self.closure_cname, name)
 
-    def declare_pyfunction(self, name, pos, allow_redefine=False):
-        binding = self._WTK_setup(name, name, visibility='private')
-        return self.WTK_declare_pyfunction(binding, allow_redefine, pos)
-
-    def WTK_declare_pyfunction(self, binding,
-                              allow_redefine=False, pos=None):
-        return LocalScope.WTK_declare_pyfunction(
+    def declare_pyfunction(self, binding, allow_redefine=False, pos=None):
+        return LocalScope.declare_pyfunction(
             self, binding, allow_redefine, pos)
 
 class StructOrUnionScope(Scope):
@@ -1801,12 +1791,7 @@ class CClassScope(ClassScope):
             self.namespace_cname = "(PyObject *)%s" % self.parent_type.typeptr_cname
             return entry
 
-    def declare_pyfunction(self, name, pos, allow_redefine=False):
-        binding = self._WTK_setup(name, name, 'extern')
-        return self.WTK_declare_pyfunction(binding, allow_redefine, pos)
-
-    def WTK_declare_pyfunction(self, binding,
-                              allow_redefine = False, pos = None):
+    def declare_pyfunction(self, binding, allow_redefine = False, pos = None):
         # Add an entry for a method.
         if binding.name in ('__eq__', '__ne__', '__lt__', '__gt__',
                                    '__le__', '__ge__'):
@@ -2106,12 +2091,7 @@ class PropertyScope(Scope):
 
     is_property_scope = 1
 
-    def declare_pyfunction(self, name, pos, allow_redefine=False):
-        binding = self._WTK_setup(name, name, visibility='private')
-        return self.WTK_declare_pyfunction(binding, allow_redefine, pos = pos)
-
-    def WTK_declare_pyfunction(self, binding,
-                              allow_redefine=False, pos=None):
+    def declare_pyfunction(self, binding, allow_redefine=False, pos=None):
         # Add an entry for a method.
         signature = get_property_accessor_signature(binding.name)
         if signature:
