@@ -16,6 +16,7 @@ import operator
 
 from Errors import error, warning, warn_once, InternalError, CompileError
 from Errors import hold_errors, release_errors, held_errors, report_error
+from Binding import Binding
 from Code import UtilityCode
 import StringEncoding
 import Naming
@@ -1335,7 +1336,9 @@ class NameNode(AtomicExprNode):
                 var_entry = entry.as_variable
                 if var_entry:
                     if var_entry.is_builtin and Options.cache_builtins:
-                        var_entry = env.declare_builtin(var_entry.name, self.pos)
+                        binding = Binding(name = var_entry.name)
+                        var_entry = env.declare_builtin(
+                            binding, pos = self.pos)
                     node = NameNode(self.pos, name = self.name)
                     node.entry = var_entry
                     node.analyse_rvalue_entry(env)
@@ -1398,7 +1401,8 @@ class NameNode(AtomicExprNode):
         if self.entry is None:
             self.entry = env.lookup(self.name)
         if not self.entry:
-            self.entry = env.declare_builtin(self.name, self.pos)
+            binding = Binding(name = self.name)
+            self.entry = env.declare_builtin(binding, pos = self.pos)
         if not self.entry:
             self.type = PyrexTypes.error_type
             return

@@ -594,12 +594,8 @@ class Scope(object):
             (), (binding.name, 'initialized'), False)
         return entry
 
-    def declare_builtin(self, name, pos):
-        binding = self._WTK_setup(name, name, visibility='private')
-        return self.WTK_declare_builtin(binding, pos)
-
-    def WTK_declare_builtin(self, binding, pos):
-        return self.outer_scope.WTK_declare_builtin(binding, pos)
+    def declare_builtin(self, binding, pos):
+        return self.outer_scope.declare_builtin(binding, pos = pos)
 
     def _declare_pyfunction(self, binding, entry = None, pos = None):
         if entry and not entry.type.is_cfunction:
@@ -820,11 +816,7 @@ class PreImportScope(Scope):
     def __init__(self):
         Scope.__init__(self, Options.pre_import, None, None)
 
-    def declare_builtin(self, name, pos):
-        binding = self._WTK_setup(name, name, visibility='private')
-        return self.WTK_declare_builtin(binding, pos)
-
-    def WTK_declare_builtin(self, binding, pos):
+    def declare_builtin(self, binding, pos):
         entry = self.WTK_declare(binding, py_object_type, pos = pos)
         entry.is_variable = True
         entry.is_pyglobal = True
@@ -853,15 +845,10 @@ class BuiltinScope(Scope):
                 name = 'unicode'
         return Scope.lookup(self, name)
 
-    def declare_builtin(self, name, pos):
-        binding = self._WTK_setup(name, name, visibility='private')
-        return self.WTK_declare_builtin(binding, pos)
-
-    def WTK_declare_builtin(self, binding, pos):
+    def declare_builtin(self, binding, pos):
         if not hasattr(builtins, binding.name):
             if self.outer_scope is not None:
-                return self.outer_scope.WTK_declare_builtin(
-                    binding, pos=pos)
+                return self.outer_scope.declare_builtin(binding, pos = pos)
             else:
                 error(pos, "undeclared name not builtin: %s" %
                       binding.name)
@@ -1028,12 +1015,7 @@ class ModuleScope(Scope):
             return entry
         return self.outer_scope.lookup(name, language_level = self.context.language_level)
 
-    def declare_builtin(self, name, pos):
-        binding = self._WTK_setup(name, name, visibility='private')
-        # python visibility?
-        return self.WTK_declare_builtin(binding, pos)
-
-    def WTK_declare_builtin(self, binding, pos):
+    def declare_builtin(self, binding, pos):
         if (not hasattr(builtins, binding.name)
             and binding.name != 'xrange'):
             # 'xrange' is special cased in Code.py
@@ -1042,8 +1024,7 @@ class ModuleScope(Scope):
                     binding, py_object_type, pos = pos)
                 return entry
             elif self.outer_scope is not None:
-                return self.outer_scope.WTK_declare_builtin(
-                    binding, pos)
+                return self.outer_scope.declare_builtin(binding, pos = pos)
             else:
                 error(pos, "undeclared name not builtin: %s" %
                       binding.name)
