@@ -853,14 +853,8 @@ class BuiltinScope(Scope):
                 error(pos, "undeclared name not builtin: %s" %
                       binding.name)
 
-    def declare_builtin_cfunction(self, name, type, cname, python_equiv = None,
-            utility_code = None):
-        binding = self._WTK_setup(name, cname, 'extern')
-        return self.WTK_declare_builtin_cfunction(binding, type, python_equiv, utility_code)
-
-    def WTK_declare_builtin_cfunction(
-        self, binding, type, python_equiv = None,
-        utility_code = None):
+    def declare_builtin_cfunction(self, binding, type, python_equiv = None,
+                                  utility_code = None):
         # If python_equiv == "*", the Python equivalent has the same name
         # as the entry, otherwise it has the name specified by python_equiv.
         binding.name = EncodedString(binding.name)
@@ -1860,13 +1854,8 @@ class CClassScope(ClassScope):
         entry.prev_entry = prev_entry
         return entry
 
-    def declare_builtin_cfunction(self, name, type, cname, utility_code = None):
-        binding = self._WTK_setup(name, cname, 'extern')
-        return self.WTK_declare_builtin_cfunction(binding, type, utility_code=utility_code)
-
-    def WTK_declare_builtin_cfunction(
-        self, binding, type, python_equiv = None,
-        utility_code = None):
+    def declare_builtin_cfunction(self, binding, type, python_equiv = None,
+                                  utility_code = None):
         # overridden methods of builtin types still have their Python
         # equivalent that must be accessible to support bound methods
         binding.name = EncodedString(binding.name)

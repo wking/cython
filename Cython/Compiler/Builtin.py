@@ -2,6 +2,7 @@
 #   Pyrex - Builtin Definitions
 #
 
+from Binding import Binding
 from Symtab import BuiltinScope, StructOrUnionScope
 from Code import UtilityCode
 from TypeSlots import Signature
@@ -346,8 +347,10 @@ class BuiltinFunction(_BuiltinOverride):
             if sig is None:
                 sig = Signature(self.args, self.ret_type)
             func_type = sig.function_type()
-        scope.declare_builtin_cfunction(self.py_name, func_type, self.cname,
-                                        self.py_equiv, self.utility_code)
+        binding = Binding(name = self.py_name, cname = self.cname, extern = 1)
+        scope.declare_builtin_cfunction(
+            binding, type = func_type, python_equiv = self.py_equiv,
+            utility_code = self.utility_code)
 
 class BuiltinMethod(_BuiltinOverride):
     def declare_in_type(self, self_type):
@@ -359,8 +362,9 @@ class BuiltinMethod(_BuiltinOverride):
             self_arg = PyrexTypes.CFuncTypeArg("", self_type, None)
             self_arg.not_none = True
             method_type = sig.function_type(self_arg)
+        binding = Binding(name = self.py_name, cname = self.cname, extern = 1)
         self_type.scope.declare_builtin_cfunction(
-            self.py_name, method_type, self.cname, utility_code = self.utility_code)
+            binding, type = method_type, utility_code = self.utility_code)
 
 
 builtin_function_table = [
