@@ -2217,7 +2217,8 @@ class DefNode(FuncDefNode):
         prefix = env.scope_prefix
         func_cname = \
             Naming.lambda_func_prefix + u'funcdef' + prefix + self.lambda_name
-        entry = env.declare_lambda_function(func_cname, self.pos)
+        binding = Binding(cname = func_cname)
+        entry = env.declare_lambda_function(binding, pos = self.pos)
         entry.pymethdef_cname = \
             Naming.lambda_func_prefix + u'methdef' + prefix + self.lambda_name
         entry.qualified_name = env.qualify_name(self.lambda_name)

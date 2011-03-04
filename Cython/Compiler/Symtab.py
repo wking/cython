@@ -636,12 +636,7 @@ class Scope(object):
         entry.is_anonymous = True
         return entry
 
-    def declare_lambda_function(self, func_cname, pos): 
-        binding = self._WTK_setup(None, func_cname, 'private')
-        return self.WTK_declare_lambda_function(binding, pos)
-
-    def WTK_declare_lambda_function(self, binding,
-                                    pos = None):
+    def declare_lambda_function(self, binding, pos = None):
         # Add an entry for an anonymous Python function.
         entry = self.WTK_declare_var(binding, py_object_type, pos = pos)
         entry.name = EncodedString(binding.cname)
