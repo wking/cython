@@ -874,13 +874,11 @@ class BuiltinScope(Scope):
             entry.as_variable = var_entry
         return entry
 
-    def declare_builtin_type(self, name, cname, utility_code = None, objstruct_cname = None):
-        binding = self._WTK_setup(name, cname, visibility='extern')
-        return self.WTK_declare_builtin_type(binding, objstruct_cname, utility_code)
-
-    def WTK_declare_builtin_type(self, binding, objstruct_cname = None, utility_code = None):
+    def declare_builtin_type(self, binding, objstruct_cname = None,
+                             utility_code = None):
         binding.name = EncodedString(binding.name)
-        type = PyrexTypes.BuiltinObjectType(binding.name, binding.cname, objstruct_cname)
+        type = PyrexTypes.BuiltinObjectType(
+            binding.name, binding.cname, objstruct_cname)
         # WTK: TODO: visibility checking
         scope = CClassScope(
             binding.name, outer_scope = None, extern = 1)

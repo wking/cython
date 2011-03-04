@@ -556,7 +556,10 @@ def init_builtin_types():
             objstruct_cname = None
         else:
             objstruct_cname = 'Py%sObject' % name.capitalize()
-        the_type = builtin_scope.declare_builtin_type(name, cname, utility, objstruct_cname)
+        binding = Binding(
+            name = name, cname = cname, extern = 1, c_visibility = 'public')
+        the_type = builtin_scope.declare_builtin_type(
+            binding, objstruct_cname = objstruct_cname, utility_code = utility)
         builtin_types[name] = the_type
         for method in methods:
             method.declare_in_type(the_type)
