@@ -365,19 +365,6 @@ class Scope(object):
         entry.scope = self
         return entry
 
-    def _WTK_setup(self, name, cname, visibility):
-        binding = Binding(name=name, cname=cname)
-        if visibility == 'extern':
-            binding.extern = 1
-            binding.c_visibility = 'public'
-        elif self.outer_scope and visibility not in ('readonly',):
-            binding.c_visibility = visibility
-        else:
-            binding.visibility = visibility
-            if binding.visibility != 'private':
-                binding.c_visibility = 'public'
-        return binding
-
     def qualify_name(self, name):
         return EncodedString("%s.%s" % (self.qualified_name, name))
 
@@ -727,7 +714,7 @@ class Scope(object):
         # variable if not found.
         entry = self.lookup_here(name)
         if not entry:
-            binding = self._WTK_setup(name, None, 'private')
+            binding = Binding(name = name)
             entry = self.declare_var(binding, py_object_type)
         return entry
 
@@ -801,7 +788,7 @@ class BuiltinScope(Scope):
 
         for name, definition in self.builtin_entries.iteritems():
             cname, type = definition
-            binding = self._WTK_setup(name, cname, 'private')
+            binding = Binding(name = name, cname = cname)
             self.declare_var(binding, type)
 
     def lookup(self, name, language_level=None):
@@ -1100,7 +1087,7 @@ class ModuleScope(Scope):
     def declare_global(self, name, pos):
         entry = self.lookup_here(name)
         if not entry:
-            binding = self._WTK_setup(name, name, 'private')
+            binding = Binding(name = name, cname = name)
             self.declare_var(binding, type = py_object_type, pos = pos)
 
     def use_utility_code(self, new_code):
