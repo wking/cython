@@ -665,7 +665,6 @@ class Scope(object):
                         warning(pos, "Function signature does not match previous declaration", 1)
                         entry.type = type
                 else:
-                    print 'EE', entry, binding.extern, entry.extern
                     error(pos, "Function signature does not match previous declaration")
         else:
             entry = self.add_cfunction(binding, pos, type, modifiers)
