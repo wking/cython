@@ -2,6 +2,7 @@
 #   Pyrex - Types
 #
 
+from Binding import Binding
 from Code import UtilityCode
 import StringEncoding
 import Naming
@@ -685,12 +686,11 @@ class CNumericType(CType):
                     extern=1)
             scope.parent_type = self
             scope.directives = {}
+            binding = Binding(name = 'conjugate', cname = ' ')
+            func_type = CFuncType(
+                self, [CFuncTypeArg("self", self, None)], nogil=True)
             entry = scope.declare_cfunction(
-                    "conjugate",
-                    CFuncType(self, [CFuncTypeArg("self", self, None)], nogil=True),
-                    pos=None,
-                    defining=1,
-                    cname=" ")
+                binding, type = func_type, defining = 1)
         return True
 
 
@@ -1192,12 +1192,12 @@ class CComplexType(CNumericType):
             scope.directives = {}
             scope.declare_var("real", self.real_type, None, "real", is_cdef=True)
             scope.declare_var("imag", self.real_type, None, "imag", is_cdef=True)
+            binding = Binding(
+                name = 'conjugate', cname = '__Pyx_c_conj%s' % self.funcsuffix)
+            func_type = CFuncType(
+                self, [CFuncTypeArg('self', self, None)], nogil=True)
             entry = scope.declare_cfunction(
-                    "conjugate",
-                    CFuncType(self, [CFuncTypeArg("self", self, None)], nogil=True),
-                    pos=None,
-                    defining=1,
-                    cname="__Pyx_c_conj%s" % self.funcsuffix)
+                binding, type = func_type, defining = 1)
 
         return True
 

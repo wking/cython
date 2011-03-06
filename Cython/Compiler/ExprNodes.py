@@ -1244,7 +1244,10 @@ class NewExprNode(AtomicExprNode):
         if constructor is None:
             return_type = PyrexTypes.CFuncType(type, [])
             return_type = PyrexTypes.CPtrType(return_type)
-            type.scope.declare_cfunction(u'<init>', return_type, self.pos)
+            binding = Binding(
+                name = u'<init>', extern = True, c_visibility = 'public')
+            type.scope.declare_cfunction(
+                binding, type = return_type, pos = self.pos)
             constructor = type.scope.lookup(u'<init>')
         self.class_type = type
         self.entry = constructor

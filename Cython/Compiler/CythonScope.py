@@ -11,11 +11,9 @@ class CythonScope(ModuleScope):
         ModuleScope.__init__(self, u'cython', None, context)
         self.pxd_file_loaded = True
 
-        self.shape_entry = self.declare_cfunction('shape',
-                                                  shape_func_type,
-                                                  pos=None,
-                                                  defining = 1,
-                                                  cname='<error>')
+        binding = Binding(name = 'shape', cname = '<error>')
+        self.shape_entry = self.declare_cfunction(
+            binding, type = shape_func_type, defining = 1)
 
     def lookup_type(self, name):
         # This function should go away when types are all first-level objects.
@@ -38,12 +36,11 @@ def create_utility_scope(context):
         binding, base_type = c_void_type, pos = None)
     type_object.is_void = True
 
-    utility_scope.declare_cfunction(
-                'PyObject_TypeCheck',
-                CFuncType(c_bint_type, [CFuncTypeArg("o", py_object_type, None),
-                                        CFuncTypeArg("t", c_ptr_type(type_object), None)]),
-                pos = None,
-                defining = 1,
-                cname = 'PyObject_TypeCheck')
+    binding = Binding(
+        name = 'PyObject_TypeCheck', cname = 'PyObject_TypeCheck')
+    func_type = CFuncType(
+        c_bint_type, [CFuncTypeArg("o", py_object_type, None),
+                      CFuncTypeArg("t", c_ptr_type(type_object), None)])
+    utility_scope.declare_cfunction(binding, type = func_type, defining = 1)
 
     return utility_scope

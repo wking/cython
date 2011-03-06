@@ -958,9 +958,9 @@ class CVarDefNode(StatNode):
             binding = Binding(name=name, cname=cname)
             binding.pull(self)
             if type.is_cfunction:
-                entry = dest_scope.WTK_declare_cfunction(
-                    binding, type = type, pos = declarator.pos,
-                    in_pxd = self.in_pxd)
+                entry = dest_scope.declare_cfunction(
+                    binding, type = type, in_pxd = self.in_pxd,
+                    pos = declarator.pos)
                 if entry is not None:
                     entry.directive_locals = self.directive_locals
             else:
@@ -1678,7 +1678,7 @@ class CFuncDefNode(FuncDefNode):
         binding.pull(self)
         binding.name = name_declarator.name
         binding.cname = name_declarator.cname
-        self.entry = env.WTK_declare_cfunction(
+        self.entry = env.declare_cfunction(
             binding, type = type, defining = self.body is not None,
             modifiers = self.modifiers, pos = self.pos)
         self.entry.inline_func_in_pxd = self.inline_in_pxd

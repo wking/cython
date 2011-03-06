@@ -635,19 +635,8 @@ class Scope(object):
     def register_pyfunction(self, entry):
         self.pyfunc_entries.append(entry)
 
-    def declare_cfunction(self, name, type, pos,
-                          cname = None, visibility = 'private', defining = 0,
-                          api = 0, in_pxd = 0, modifiers = (), utility_code = None):
-        binding = self._WTK_setup(name, cname, visibility)
-        binding.api = api
-        return self.WTK_declare_cfunction(
-            binding,
-            pos, type, defining, in_pxd, modifiers, utility_code)
-
-    def WTK_declare_cfunction(
-        self, binding, pos, type, defining = 0,
-        in_pxd = 0, modifiers = (), utility_code = None):
-
+    def declare_cfunction(self, binding, type, defining = 0, in_pxd = 0,
+                          modifiers = (), utility_code = None, pos = None):
         # Add an entry for a C function.
         if not binding.cname:
             if binding.api or binding.c_visibility != 'private':
@@ -846,9 +835,8 @@ class BuiltinScope(Scope):
         # If python_equiv == "*", the Python equivalent has the same name
         # as the entry, otherwise it has the name specified by python_equiv.
         binding.name = EncodedString(binding.name)
-        entry = self.WTK_declare_cfunction(
-            binding, pos=None, type=type,
-            utility_code = utility_code)
+        entry = self.declare_cfunction(
+            binding, type=type, utility_code = utility_code)
         if python_equiv:
             if python_equiv == "*":
                 python_equiv = binding.name
@@ -1564,20 +1552,9 @@ class StructOrUnionScope(Scope):
                   "C struct/union member cannot be a Python object")
         return entry
 
-    def declare_cfunction(self, name, type, pos,
-                          cname = None, visibility = 'private', defining = 0,
-                          api = 0, in_pxd = 0, modifiers = (), utility_code = None):
-        binding = self._WTK_setup(name, cname, visibility)
-        binding.api = api
-        return self.WTK_declare_cfunction(
-            binding,
-            pos, type, defining, in_pxd, modifiers, utility_code)
-
-    def WTK_declare_cfunction(
-        self, binding, pos, type, defining = 0,
-        in_pxd = 0, modifiers = (), utility_code = None):
+    def declare_cfunction(self, binding, type, defining = 0, in_pxd = 0,
+                          modifiers = (), utility_code = None, pos = None):
         return self.WTK_declare_var(binding, type, pos=pos)
-
 
 
 class ClassScope(Scope):
@@ -1768,18 +1745,8 @@ class CClassScope(ClassScope):
             name = EncodedString("__cinit__")
         return ClassScope.lookup_here(self, name)
 
-    def declare_cfunction(self, name, type, pos,
-                          cname = None, visibility = 'private', defining = 0,
-                          api = 0, in_pxd = 0, modifiers = (), utility_code = None):
-        binding = self._WTK_setup(name, cname, visibility)
-        binding.api = api
-        return self.WTK_declare_cfunction(
-            binding,
-            pos, type, defining, in_pxd, modifiers, utility_code)
-
-    def WTK_declare_cfunction(
-        self, binding, pos, type, defining = 0,
-        in_pxd = 0, modifiers = (), utility_code = None):
+    def declare_cfunction(self, binding, type, defining = 0, in_pxd = 0,
+                          modifiers = (), utility_code = None, pos = None):
         if get_special_method_signature(binding.name):
             error(pos, "Special methods must be declared with 'def', not 'cdef'")
         args = type.args
@@ -1836,9 +1803,8 @@ class CClassScope(ClassScope):
         binding.name = EncodedString(binding.name)
         #entry = self.declare_cfunction(binding.name, type, None, binding.cname, visibility='extern',
         #                               utility_code = utility_code)
-        entry = self.WTK_declare_cfunction(
-            binding, pos=None, type=type,
-            utility_code = utility_code)  # WTK: need all declare_cfunction-s wrapped
+        entry = self.declare_cfunction(
+            binding, type=type, utility_code = utility_code)
         var_entry = WTK_Entry(
             Binding(name=binding.name, cname=binding.name), py_object_type)
         var_entry.is_variable = 1
@@ -1945,18 +1911,10 @@ class CppClassScope(Scope):
             error(pos, "no matching function for call to %s::%s()" %
                   (self.default_constructor, self.default_constructor))
 
-    def declare_cfunction(self, name, type, pos,
-                          cname = None, visibility = 'extern', defining = 0,
-                          api = 0, in_pxd = 0, modifiers = (), utility_code = None):
-        binding = self._WTK_setup(name, cname, visibility)
-        binding.api = api
-        return self.WTK_declare_cfunction(
-            binding,
-            pos, type, defining, in_pxd, modifiers, utility_code)
-
-    def WTK_declare_cfunction(
-        self, binding, pos, type, defining = 0,
-        in_pxd = 0, modifiers = (), utility_code = None):
+    def declare_cfunction(self, binding, type, defining = 0, in_pxd = 0,
+                          modifiers = (), utility_code = None, pos = None):
+        if not binding.extern:
+            error(pos, "c++ cfunctions must be 'extern'")
         if binding.name == self.name.split('::')[-1] and binding.cname is None:
             self.check_base_default_constructor(pos)
             binding.name = '<init>'
@@ -1988,7 +1946,7 @@ class CppClassScope(Scope):
         for base_entry in base_scope.cfunc_entries:
             binding = Binding()
             binding.pull(base_entry)
-            entry = self.WTK_declare_cfunction(
+            entry = self.declare_cfunction(
                 binding, type = base_entry.type,
                 modifiers = base_entry.func_modifiers,
                 utility_code = base_entry.utility_code,
@@ -2014,9 +1972,8 @@ class CppClassScope(Scope):
                 for e in entry.all_alternatives():
                     binding = Binding()
                     binding.pull(e)
-                    scope.WTK_declare_cfunction(
-                        binding,
-                        type = e.type.specialize(values),
+                    scope.declare_cfunction(
+                        binding, type = e.type.specialize(values),
                         utility_code = e.utility_code, pos = e.pos)
         return scope
 
