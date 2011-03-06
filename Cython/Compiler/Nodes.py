@@ -1026,7 +1026,7 @@ class CStructOrUnionDefNode(StatNode):
                     binding.pull(self)
                     binding.c_visibility = 'ignore'
                     binding.visibility = 'private'
-                    self.entry = env.WTK_declare_typedef(
+                    self.entry = env.declare_typedef(
                         binding, base_type = struct_entry.type, pos = self.pos)
                     struct_entry.type.typedef_flag = False
                     # FIXME: this might be considered a hack ;-)
@@ -1166,7 +1166,7 @@ class CTypeDefNode(StatNode):
         binding.pull(self)
         binding.name = name_declarator.name
         binding.cname = name_declarator.cname
-        entry = env.WTK_declare_typedef(
+        entry = env.declare_typedef(
             binding, base_type = type, pos = self.pos)
         if self.in_pxd and not env.in_cinclude:
             entry.defined_in_pxd = 1
@@ -3495,7 +3495,7 @@ class SingleAssignmentNode(AssignmentNode):
                         binding = Binding(
                             name = lhs.name, c_visibility='private',
                             visibility='public')
-                        env.WTK_declare_typedef(
+                        env.declare_typedef(
                             binding, base_type = type, pos = self.pos)
 
                 elif func_name in ['struct', 'union']:

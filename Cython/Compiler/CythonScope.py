@@ -1,3 +1,4 @@
+from Binding import Binding
 from Symtab import ModuleScope
 from PyrexTypes import *
 
@@ -32,10 +33,9 @@ def create_utility_scope(context):
     utility_scope = ModuleScope(u'utility', None, context)
 
     # These are used to optimize isinstance in FinalOptimizePhase
-    type_object = utility_scope.declare_typedef('PyTypeObject',
-                                                base_type = c_void_type,
-                                                pos = None,
-                                                cname = 'PyTypeObject')
+    binding = Binding(name = 'PyTypeObject', cname = 'PyTypeObject')
+    type_object = utility_scope.declare_typedef(
+        binding, base_type = c_void_type, pos = None)
     type_object.is_void = True
 
     utility_scope.declare_cfunction(

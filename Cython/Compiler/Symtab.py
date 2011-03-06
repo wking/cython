@@ -410,12 +410,7 @@ class Scope(object):
         # here we would set as_variable to an object representing this type
         return entry
 
-    def declare_typedef(self, name, base_type, pos, cname = None,
-                        visibility = 'private'):
-        binding = self._WTK_setup(name, cname, visibility=visibility)
-        return self.WTK_declare_typedef(binding, base_type, pos)
-
-    def WTK_declare_typedef(self, binding,
+    def declare_typedef(self, binding,
                             base_type, pos):
         if not binding.cname:
             if self.in_cinclude or binding.c_visibility == 'public':
