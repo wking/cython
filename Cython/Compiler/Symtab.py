@@ -335,7 +335,7 @@ class Scope(object):
         # Return the module-level scope containing this scope.
         return self.outer_scope.builtin_scope()
 
-    def WTK_declare(self, binding, type, shadow = 0, pos = None):
+    def declare(self, binding, type, shadow = 0, pos = None):
         # Create new entry, and add to dictionary if
         # name is not None. Reports a warning if already
         # declared.
@@ -378,10 +378,6 @@ class Scope(object):
                 binding.c_visibility = 'public'
         return binding
 
-    def declare(self, name, cname, type, pos, visibility, shadow = 0):
-        binding = self._WTK_setup(name, cname, visibility)
-        return self.WTK_declare(binding, type, shadow = shadow, pos = pos)
-
     def qualify_name(self, name):
         return EncodedString("%s.%s" % (self.qualified_name, name))
 
@@ -393,7 +389,7 @@ class Scope(object):
             else:
                 binding.cname = self.mangle(
                     Naming.enum_prefix, binding.name)
-        entry = self.WTK_declare(binding, type, pos = pos)
+        entry = self.declare(binding, type, pos = pos)
         entry.is_const = 1
         entry.value_node = value
         return entry
@@ -403,7 +399,7 @@ class Scope(object):
         # Add an entry for a type definition.
         if not binding.cname:
             binding.cname = binding.name
-        entry = self.WTK_declare(binding, type, shadow = shadow, pos = pos)
+        entry = self.declare(binding, type, shadow = shadow, pos = pos)
         entry.is_type = 1
         if defining:
             self.type_entries.append(entry)
@@ -496,9 +492,10 @@ class Scope(object):
                     self.type_entries.append(entry)
         if templates is not None:
             for T in templates:
-                binding = self._WTK_setup(T.name, T.name, 'extern')
-                template_entry = entry.type.scope.WTK_declare(
-                    binding, type=T, pos=None)
+                binding = Binding(
+                    name=T.name, cname=T.name,
+                    extern=True, c_visibility='public')
+                template_entry = entry.type.scope.declare(binding, type=T)
                 template_entry.is_type = 1
 
         def declare_inherited_attributes(entry, base_classes):
@@ -569,7 +566,7 @@ class Scope(object):
             constructor = type.scope.lookup(u'<init>')
             if constructor is not None and PyrexTypes.best_match([], constructor.all_alternatives()) is None:
                 error(pos, "C++ class must have a default constructor to be stack allocated")
-        entry = self.WTK_declare(binding, type, pos = pos)
+        entry = self.declare(binding, type, pos = pos)
         entry.is_variable = 1
         self.control_flow.set_state(
             (), (binding.name, 'initialized'), False)
@@ -684,7 +681,7 @@ class Scope(object):
     def add_cfunction(self, binding, pos, type,
                           modifiers = ()):
         # Add a C function entry without giving it a func_cname.
-        entry = self.WTK_declare(binding, type, pos = pos)
+        entry = self.declare(binding, type, pos = pos)
         entry.is_cfunction = 1
         if modifiers:
             entry.func_modifiers = modifiers
@@ -786,7 +783,7 @@ class PreImportScope(Scope):
         Scope.__init__(self, Options.pre_import, None, None)
 
     def declare_builtin(self, binding, pos):
-        entry = self.WTK_declare(binding, py_object_type, pos = pos)
+        entry = self.declare(binding, py_object_type, pos = pos)
         entry.is_variable = True
         entry.is_pyglobal = True
         return entry
@@ -992,7 +989,7 @@ class ModuleScope(Scope):
             for entry in self.cached_builtins:
                 if entry.name == binding.name:
                     return entry
-        entry = self.WTK_declare(Binding(), py_object_type, pos = pos)
+        entry = self.declare(Binding(), py_object_type, pos = pos)
         if Options.cache_builtins:
             entry.is_builtin = 1
             entry.is_const = 1
@@ -1371,7 +1368,7 @@ class LocalScope(Scope):
         # Add an entry for an argument of a function.
         if binding.cname is None:
             binding.cname = self.mangle(Naming.var_prefix, binding.name)
-        entry = self.WTK_declare(binding, type, pos = pos)
+        entry = self.declare(binding, type, pos = pos)
         entry.is_variable = 1
         if type.is_pyobject:
             entry.init = "0"
@@ -1464,8 +1461,7 @@ class GeneratorExpressionScope(Scope):
         # this scope must hold its name exclusively
         binding.cname = '%s%s' % (self.genexp_prefix, self.parent_scope.mangle(
                 Naming.var_prefix, binding.name))
-        entry = self.WTK_declare(
-            binding, type, pos = pos)
+        entry = self.declare(binding, type, pos = pos)
         entry.is_variable = 1
         self.var_entries.append(entry)
         self.entries[binding.name] = entry
@@ -1508,7 +1504,7 @@ class StructOrUnionScope(Scope):
                 binding.cname = c_safe_identifier(binding.cname)
         if type.is_cfunction:
             type = PyrexTypes.CPtrType(type)
-        entry = self.WTK_declare(binding, type, pos = pos)
+        entry = self.declare(binding, type, pos = pos)
         entry.is_variable = 1
         self.var_entries.append(entry)
         if type.is_pyobject and not allow_pyobject:
@@ -1628,7 +1624,7 @@ class CClassScope(ClassScope):
                     binding.cname = c_safe_identifier(binding.cname)
             if type.is_cpp_class and not binding.extern:
                 error(pos, "C++ classes not allowed as members of an extension type, use a pointer or reference instead")
-            entry = self.WTK_declare(binding, type, pos = pos)
+            entry = self.declare(binding, type, pos = pos)
             entry.is_variable = 1
             self.var_entries.append(entry)
             if type.is_pyobject:
@@ -1761,7 +1757,7 @@ class CClassScope(ClassScope):
     def declare_property(self, binding, doc, pos = None):
         entry = self.lookup_here(binding.name)
         if entry is None:
-            entry = self.WTK_declare(binding, py_object_type, pos = pos)
+            entry = self.declare(binding, py_object_type, pos = pos)
         entry.is_property = 1
         entry.doc = doc
         # WTK: TODO: adjust PropertyScope attributes
@@ -1779,12 +1775,11 @@ class CClassScope(ClassScope):
             return "%s.%s" % (Naming.obj_base_cname, base_entry.cname)
         for base_entry in \
             base_scope.inherited_var_entries + base_scope.var_entries:
-                entry = self.declare(
-                    base_entry.name,
-                    adapt(base_entry.cname),
-                    base_entry.type, None, 'private')
-                entry.is_variable = 1
-                self.inherited_var_entries.append(entry)
+            binding = Binding(
+                name = base_entry.name, cname = adapt(base_entry.cname))
+            entry = self.declare(binding, type = base_entry.type)
+            entry.is_variable = 1
+            self.inherited_var_entries.append(entry)
         for base_entry in base_scope.cfunc_entries:
             binding = Binding()
             binding.pull(base_entry)
@@ -1817,7 +1812,7 @@ class CppClassScope(Scope):
             binding.cname = binding.name
         if type.is_cfunction:
             type = PyrexTypes.CPtrType(type)
-        entry = self.WTK_declare(binding, type, pos = pos)
+        entry = self.declare(binding, type, pos = pos)
         entry.is_variable = 1
         self.var_entries.append(entry)
         if type.is_pyobject and not allow_pyobject:
@@ -1879,9 +1874,13 @@ class CppClassScope(Scope):
                 #print base_entry.name, self.entries
                 if base_entry.name in self.entries:
                     base_entry.name
+                binding = Binding(
+                    name = base_entry.name,
+                    cname = base_entry.cname,
+                    extern = True,
+                    c_visibility = 'public')
                 entry = self.declare(
-                    base_entry.name, base_entry.cname,
-                    base_entry.type, None, 'extern')
+                    binding, type = base_entry.type)
                 entry.is_variable = 1
                 self.inherited_var_entries.append(entry)
         for base_entry in base_scope.cfunc_entries:
@@ -1933,7 +1932,7 @@ class PropertyScope(Scope):
         # Add an entry for a method.
         signature = get_property_accessor_signature(binding.name)
         if signature:
-            entry = self.WTK_declare(binding, py_object_type, pos = pos)
+            entry = self.declare(binding, py_object_type, pos = pos)
             entry.is_special = 1
             entry.signature = signature
             return entry

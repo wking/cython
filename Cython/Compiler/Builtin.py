@@ -337,7 +337,8 @@ class BuiltinAttribute(object):
             field_type = builtin_scope.lookup(self.field_type_name).type
         else:
             field_type = self.field_type or PyrexTypes.py_object_type
-        entry = self_type.scope.declare(self.py_name, self.cname, field_type, None, 'private')
+        binding = Binding(name=self.py_name, cname=self.cname)
+        entry = self_type.scope.declare(binding, type = field_type)
         entry.is_variable = True
 
 class BuiltinFunction(_BuiltinOverride):
