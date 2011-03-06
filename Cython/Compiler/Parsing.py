@@ -1726,8 +1726,7 @@ def p_simple_statement(s, first_statement = 0):
 def p_simple_statement_list(s, ctx, first_statement = 0):
     # Parse a series of simple statements on one line
     # separated by semicolons.
-    _LOG.debug('p_simple_statement_list(s=<s sy:%s systring:%s>)'
-               % (s.sy, s.systring))
+    _LOG.debug('p_simple_statement_list(s=<s sy:%s systring:%s>)' % (s.sy, s.systring))
     stat = p_simple_statement(s, first_statement = first_statement)
     if s.sy == ';':
         stats = [stat]
@@ -1742,8 +1741,7 @@ def p_simple_statement_list(s, ctx, first_statement = 0):
     return stat
 
 def p_compile_time_expr(s):
-    _LOG.debug('p_compile_time_expr(s=<s sy:%s systring:%s>)'
-               % (s.sy, s.systring))
+    _LOG.debug('p_compile_time_expr(s=<s sy:%s systring:%s>)' % (s.sy, s.systring))
     old = s.compile_time_expr
     s.compile_time_expr = 1
     expr = p_testlist(s)
@@ -1751,8 +1749,7 @@ def p_compile_time_expr(s):
     return expr
 
 def p_DEF_statement(s):
-    _LOG.debug('p_DEF_statement(s=<s sy:%s systring:%s>)'
-               % (s.sy, s.systring))
+    _LOG.debug('p_DEF_statement(s=<s sy:%s systring:%s>)' % (s.sy, s.systring))
     pos = s.position()
     denv = s.compile_time_env
     s.next() # 'DEF'
@@ -1766,8 +1763,7 @@ def p_DEF_statement(s):
     return Nodes.PassStatNode(pos)
 
 def p_IF_statement(s, ctx):
-    _LOG.debug('p_IF_statement(s=<s sy:%s systring:%s>)'
-               % (s.sy, s.systring))
+    _LOG.debug('p_IF_statement(s=<s sy:%s systring:%s>)' % (s.sy, s.systring))
     pos = s.position()
     saved_eval = s.compile_time_eval
     current_eval = saved_eval
@@ -1795,8 +1791,7 @@ def p_IF_statement(s, ctx):
     return result
 
 def p_statement(s, ctx, first_statement = 0):
-    _LOG.debug('p_statement(s=<s sy:%s systring:%s>)'
-               % (s.sy, s.systring))
+    _LOG.debug('p_statement(s=<s sy:%s systring:%s>)' % (s.sy, s.systring))
     decorators = None
     pos = s.position()
     if s.sy == 'DEF':
@@ -1901,8 +1896,7 @@ def p_statement(s, ctx, first_statement = 0):
 
 def p_statement_list(s, ctx, first_statement = 0):
     # Parse a series of statements separated by newlines.
-    _LOG.debug('p_statement_list(s=<s sy:%s systring:%s>)'
-               % (s.sy, s.systring))
+    _LOG.debug('p_statement_list(s=<s sy:%s systring:%s>)' % (s.sy, s.systring))
     pos = s.position()
     stats = []
     while s.sy not in ('DEDENT', 'EOF'):
@@ -1914,8 +1908,7 @@ def p_statement_list(s, ctx, first_statement = 0):
         return Nodes.StatListNode(pos, stats = stats)
 
 def p_suite(s, ctx = Ctx(), with_doc = 0, with_pseudo_doc = 0):
-    _LOG.debug('p_suite(s=<s sy:%s systring:%s>)'
-               % (s.sy, s.systring))
+    _LOG.debug('p_suite(s=<s sy:%s systring:%s>)' % (s.sy, s.systring))
     pos = s.position()
     s.expect(':')
     doc = None
@@ -1948,8 +1941,7 @@ def p_positional_and_keyword_args(s, end_sy_set, templates = None):
 
     Returns: (positional_args, keyword_args)
     """
-    _LOG.debug('p_positional_and_keyword_args(s=<s sy:%s systring:%s>)'
-               % (s.sy, s.systring))
+    _LOG.debug('p_positional_and_keyword_args(s=<s sy:%s systring:%s>)' % (s.sy, s.systring))
     positional_args = []
     keyword_args = []
     pos_idx = 0
@@ -2002,16 +1994,14 @@ def p_positional_and_keyword_args(s, end_sy_set, templates = None):
 def p_c_base_type(s, self_flag = 0, nonempty = 0, templates = None):
     # If self_flag is true, this is the base type for the
     # self argument of a C method of an extension type.
-    _LOG.debug('p_c_base_type(s=<s sy:%s systring:%s>)'
-               % (s.sy, s.systring))
+    _LOG.debug('p_c_base_type(s=<s sy:%s systring:%s>)' % (s.sy, s.systring))
     if s.sy == '(':
         return p_c_complex_base_type(s)
     else:
         return p_c_simple_base_type(s, self_flag, nonempty = nonempty, templates = templates)
 
 def p_calling_convention(s):
-    _LOG.debug('p_calling_convention(s=<s sy:%s systring:%s>)'
-               % (s.sy, s.systring))
+    _LOG.debug('p_calling_convention(s=<s sy:%s systring:%s>)' % (s.sy, s.systring))
     if s.sy == 'IDENT' and s.systring in calling_convention_words:
         result = s.systring
         s.next()
@@ -2023,8 +2013,7 @@ calling_convention_words = ("__stdcall", "__cdecl", "__fastcall")
 
 def p_c_complex_base_type(s):
     # s.sy == '('
-    _LOG.debug('p_c_complex_base_type(s=<s sy:%s systring:%s>)'
-               % (s.sy, s.systring))
+    _LOG.debug('p_c_complex_base_type(s=<s sy:%s systring:%s>)' % (s.sy, s.systring))
     pos = s.position()
     s.next()
     base_type = p_c_base_type(s)
@@ -2034,8 +2023,7 @@ def p_c_complex_base_type(s):
         base_type = base_type, declarator = declarator)
 
 def p_c_simple_base_type(s, self_flag, nonempty, templates = None):
-    _LOG.debug('p_c_simple_base_type(s=<s sy:%s systring:%s>, self_flag=%s, nonempty=%s)'
-               % (s.sy, s.systring, self_flag, nonempty))
+    _LOG.debug('p_c_simple_base_type(s=<s sy:%s systring:%s>, self_flag=%s, nonempty=%s)' % (s.sy, s.systring, self_flag, nonempty))
     is_basic = 0
     signed = 1
     longness = 0
@@ -2104,8 +2092,7 @@ def p_c_simple_base_type(s, self_flag, nonempty, templates = None):
 
 def p_buffer_or_template(s, base_type_node, templates):
     # s.sy == '['
-    _LOG.debug('p_buffer_or_template(s=<s sy:%s systring:%s>)'
-               % (s.sy, s.systring))
+    _LOG.debug('p_buffer_or_template(s=<s sy:%s systring:%s>)' % (s.sy, s.systring))
     pos = s.position()
     s.next()
     # Note that buffer_positional_options_count=1, so the only positional argument is dtype.
@@ -2128,13 +2115,11 @@ def p_buffer_or_template(s, base_type_node, templates):
 
 
 def looking_at_name(s):
-    _LOG.debug('looking_at_name(s=<s sy:%s systring:%s>)'
-               % (s.sy, s.systring))
+    _LOG.debug('looking_at_name(s=<s sy:%s systring:%s>)' % (s.sy, s.systring))
     return s.sy == 'IDENT' and not s.systring in calling_convention_words
 
 def looking_at_expr(s):
-    _LOG.debug('looking_at_expr(s=<s sy:%s systring:%s>)'
-               % (s.sy, s.systring))
+    _LOG.debug('looking_at_expr(s=<s sy:%s systring:%s>)' % (s.sy, s.systring))
     if s.systring in base_type_start_words:
         return False
     elif s.sy == 'IDENT':
@@ -2171,13 +2156,11 @@ def looking_at_expr(s):
         return True
 
 def looking_at_base_type(s):
-    _LOG.debug('looking_at_base_type(s=<s sy:%s systring:%s>)'
-               % (s.sy, s.systring))
+    _LOG.debug('looking_at_base_type(s=<s sy:%s systring:%s>)' % (s.sy, s.systring))
     return s.sy == 'IDENT' and s.systring in base_type_start_words
 
 def looking_at_dotted_name(s):
-    _LOG.debug('looking_at_dotted_name(s=<s sy:%s systring:%s>)'
-               % (s.sy, s.systring))
+    _LOG.debug('looking_at_dotted_name(s=<s sy:%s systring:%s>)' % (s.sy, s.systring))
     if s.sy == 'IDENT':
         name = s.systring
         s.next()
@@ -2204,8 +2187,7 @@ base_type_start_words = \
     basic_c_type_names + sign_and_longness_words + tuple(special_basic_c_types)
 
 def p_sign_and_longness(s):
-    _LOG.debug('p_sign_and_longness(s=<s sy:%s systring:%s>)'
-               % (s.sy, s.systring))
+    _LOG.debug('p_sign_and_longness(s=<s sy:%s systring:%s>)' % (s.sy, s.systring))
     signed = 1
     longness = 0
     while s.sy == 'IDENT' and s.systring in sign_and_longness_words:
@@ -2221,8 +2203,7 @@ def p_sign_and_longness(s):
     return signed, longness
 
 def p_opt_cname(s):
-    _LOG.debug('p_opt_cname(s=<s sy:%s systring:%s>)'
-               % (s.sy, s.systring))
+    _LOG.debug('p_opt_cname(s=<s sy:%s systring:%s>)' % (s.sy, s.systring))
     literal = p_opt_string_literal(s, 'u')
     if literal is not None:
         cname = EncodedString(literal)
@@ -2238,8 +2219,7 @@ def p_c_declarator(s, ctx = Ctx(), empty = 0, is_type = 0, cmethod_flag = 0,
     # the declarator must be nonempty. Otherwise we don't care.
     # If cmethod_flag is true, then if this declarator declares
     # a function, it's a C method of an extension type.
-    _LOG.debug('p_c_declarator(s=<s sy:%s systring:%s>)'
-               % (s.sy, s.systring))
+    _LOG.debug('p_c_declarator(s=<s sy:%s systring:%s>)' % (s.sy, s.systring))
     pos = s.position()
     if s.sy == '(':
         s.next()
@@ -2269,8 +2249,7 @@ def p_c_declarator(s, ctx = Ctx(), empty = 0, is_type = 0, cmethod_flag = 0,
     return result
 
 def p_c_array_declarator(s, base):
-    _LOG.debug('p_c_array_declarator(s=<s sy:%s systring:%s>)'
-               % (s.sy, s.systring))
+    _LOG.debug('p_c_array_declarator(s=<s sy:%s systring:%s>)' % (s.sy, s.systring))
     pos = s.position()
     s.next() # '['
     if s.sy != ']':
@@ -2282,8 +2261,7 @@ def p_c_array_declarator(s, base):
 
 def p_c_func_declarator(s, pos, ctx, base, cmethod_flag):
     #  Opening paren has already been skipped
-    _LOG.debug('p_c_func_declarator(s=<s sy:%s systring:%s>)'
-               % (s.sy, s.systring))
+    _LOG.debug('p_c_func_declarator(s=<s sy:%s systring:%s>)' % (s.sy, s.systring))
     args = p_c_arg_list(s, ctx, cmethod_flag = cmethod_flag,
                         nonempty_declarators = 0)
     ellipsis = p_optional_ellipsis(s)
@@ -2305,8 +2283,7 @@ supported_overloaded_operators = cython.set([
 
 def p_c_simple_declarator(s, ctx, empty, is_type, cmethod_flag,
                           assignable, nonempty):
-    _LOG.debug('p_c_simple_declarator(s=<s sy:%s systring:%s>)'
-               % (s.sy, s.systring))
+    _LOG.debug('p_c_simple_declarator(s=<s sy:%s systring:%s>)' % (s.sy, s.systring))
     pos = s.position()
     calling_convention = p_calling_convention(s)
     if s.sy == '*':
@@ -2374,8 +2351,7 @@ def p_c_simple_declarator(s, ctx, empty, is_type, cmethod_flag,
     return result
 
 def p_nogil(s):
-    _LOG.debug('p_nogil(s=<s sy:%s systring:%s>)'
-               % (s.sy, s.systring))
+    _LOG.debug('p_nogil(s=<s sy:%s systring:%s>)' % (s.sy, s.systring))
     if s.sy == 'IDENT' and s.systring == 'nogil':
         s.next()
         return 1
@@ -2383,8 +2359,7 @@ def p_nogil(s):
         return 0
 
 def p_with_gil(s):
-    _LOG.debug('p_with_gil(s=<s sy:%s systring:%s>)'
-               % (s.sy, s.systring))
+    _LOG.debug('p_with_gil(s=<s sy:%s systring:%s>)' % (s.sy, s.systring))
     if s.sy == 'with':
         s.next()
         s.expect_keyword('gil')
@@ -2393,8 +2368,7 @@ def p_with_gil(s):
         return 0
 
 def p_exception_value_clause(s):
-    _LOG.debug('p_exception_value_clause(s=<s sy:%s systring:%s>)'
-               % (s.sy, s.systring))
+    _LOG.debug('p_exception_value_clause(s=<s sy:%s systring:%s>)' % (s.sy, s.systring))
     exc_val = None
     exc_check = 0
     if s.sy == 'except':
@@ -2422,8 +2396,7 @@ def p_c_arg_list(s, ctx = Ctx(), in_pyfunc = 0, cmethod_flag = 0,
                  nonempty_declarators = 0, kw_only = 0, annotated = 1):
     #  Comma-separated list of C argument declarations, possibly empty.
     #  May have a trailing comma.
-    _LOG.debug('p_c_arg_list(s=<s sy:%s systring:%s>)'
-               % (s.sy, s.systring))
+    _LOG.debug('p_c_arg_list(s=<s sy:%s systring:%s>)' % (s.sy, s.systring))
     args = []
     is_self_arg = cmethod_flag
     while s.sy not in c_arg_list_terminators:
@@ -2437,8 +2410,7 @@ def p_c_arg_list(s, ctx = Ctx(), in_pyfunc = 0, cmethod_flag = 0,
     return args
 
 def p_optional_ellipsis(s):
-    _LOG.debug('p_optional_ellipsis(s=<s sy:%s systring:%s>)'
-               % (s.sy, s.systring))
+    _LOG.debug('p_optional_ellipsis(s=<s sy:%s systring:%s>)' % (s.sy, s.systring))
     if s.sy == '.':
         expect_ellipsis(s)
         return 1
@@ -2447,8 +2419,7 @@ def p_optional_ellipsis(s):
 
 def p_c_arg_decl(s, ctx, in_pyfunc, cmethod_flag = 0, nonempty = 0,
                  kw_only = 0, annotated = 1):
-    _LOG.debug('p_c_arg_decl(s=<s sy:%s systring:%s>)'
-               % (s.sy, s.systring))
+    _LOG.debug('p_c_arg_decl(s=<s sy:%s systring:%s>)' % (s.sy, s.systring))
     pos = s.position()
     not_none = or_none = 0
     default = None
@@ -2496,8 +2467,7 @@ def p_c_arg_decl(s, ctx, in_pyfunc, cmethod_flag = 0, nonempty = 0,
         kw_only = kw_only)
 
 def p_api(s):
-    _LOG.debug('p_api(s=<s sy:%s systring:%s>)'
-               % (s.sy, s.systring))
+    _LOG.debug('p_api(s=<s sy:%s systring:%s>)' % (s.sy, s.systring))
     if s.sy == 'IDENT' and s.systring == 'api':
         s.next()
         return 1
@@ -2508,8 +2478,7 @@ def p_cdef_block(s, ctx):
     return p_suite(s, ctx(cdef_flag = 1))
 
 def p_cdef_extern_block(s, pos, ctx):
-    _LOG.debug('p_cdef_extern_block(s=<s sy:%s systring:%s>)'
-               % (s.sy, s.systring))
+    _LOG.debug('p_cdef_extern_block(s=<s sy:%s systring:%s>)' % (s.sy, s.systring))
     if ctx.overridable:
         error(pos, "cdef extern blocks cannot be declared cpdef")
     include_file = None
@@ -2534,8 +2503,7 @@ def p_cdef_extern_block(s, pos, ctx):
 
 def p_c_enum_definition(s, pos, ctx):
     # s.sy == ident 'enum'
-    _LOG.debug('p_c_enum_definition(s=<s sy:%s systring:%s>)'
-               % (s.sy, s.systring))
+    _LOG.debug('p_c_enum_definition(s=<s sy:%s systring:%s>)' % (s.sy, s.systring))
     s.next()
     if s.sy == 'IDENT':
         name = s.systring
@@ -2572,8 +2540,7 @@ def p_c_enum_definition(s, pos, ctx):
         in_pxd = ctx.level == 'module_pxd')
 
 def p_c_enum_line(s, ctx, items):
-    _LOG.debug('p_c_enum_line(s=<s sy:%s systring:%s>)'
-               % (s.sy, s.systring))
+    _LOG.debug('p_c_enum_line(s=<s sy:%s systring:%s>)' % (s.sy, s.systring))
     if s.sy != 'pass':
         p_c_enum_item(s, ctx, items)
         while s.sy == ',':
@@ -2586,8 +2553,7 @@ def p_c_enum_line(s, ctx, items):
     s.expect_newline("Syntax error in enum item list")
 
 def p_c_enum_item(s, ctx, items):
-    _LOG.debug('p_c_enum_item(s=<s sy:%s systring:%s>)'
-               % (s.sy, s.systring))
+    _LOG.debug('p_c_enum_item(s=<s sy:%s systring:%s>)' % (s.sy, s.systring))
     pos = s.position()
     ctx = p_binding(s, ctx)
     name = p_ident(s)
@@ -2606,8 +2572,7 @@ def p_c_enum_item(s, ctx, items):
 
 
 def p_c_struct_or_union_definition(s, pos, ctx):
-    _LOG.debug('p_c_struct_or_union_definition(s=<s sy:%s systring:%s>)'
-               % (s.sy, s.systring))
+    _LOG.debug('p_c_struct_or_union_definition(s=<s sy:%s systring:%s>)' % (s.sy, s.systring))
     packed = False
     if s.systring == 'packed':
         packed = True
@@ -2653,8 +2618,7 @@ def p_c_struct_or_union_definition(s, pos, ctx):
         packed = packed)
 
 def p_visibility(s, ctx):
-    _LOG.debug('p_visibility(s=<s sy:%s systring:%s>)'
-               % (s.sy, s.systring))
+    _LOG.debug('p_visibility(s=<s sy:%s systring:%s>)' % (s.sy, s.systring))
     pos = s.position()
     if s.sy == 'IDENT' and s.systring in ('extern', 'public', 'readonly'):
         visibility = s.systring
@@ -2676,8 +2640,7 @@ def p_visibility(s, ctx):
     return ctx
 
 def p_c_modifiers(s):
-    _LOG.debug('p_c_modifiers(s=<s sy:%s systring:%s>)'
-               % (s.sy, s.systring))
+    _LOG.debug('p_c_modifiers(s=<s sy:%s systring:%s>)' % (s.sy, s.systring))
     if s.sy == 'IDENT' and s.systring in ('inline',):
         modifier = s.systring
         s.next()
@@ -2685,8 +2648,7 @@ def p_c_modifiers(s):
     return []
 
 def p_binding(s, ctx):
-    _LOG.debug('p_binding(s=<s sy:%s systring:%s>)'
-               % (s.sy, s.systring))
+    _LOG.debug('p_binding(s=<s sy:%s systring:%s>)' % (s.sy, s.systring))
     new_ctx = ctx()
     new_ctx.overridable = 0
     if s.sy == 'cdef':
@@ -2710,8 +2672,7 @@ def p_binding(s, ctx):
     return new_ctx
 
 def p_c_func_or_var_declaration(s, pos, ctx, decorators=None):
-    _LOG.debug('p_c_func_or_var_declaration(s=<s sy:%s systring:%s>)'
-               % (s.sy, s.systring))
+    _LOG.debug('p_c_func_or_var_declaration(s=<s sy:%s systring:%s>)' % (s.sy, s.systring))
     cmethod_flag = ctx.level in ('c_class', 'c_class_pxd')
     modifiers = p_c_modifiers(s)
     base_type = p_c_base_type(s, nonempty = 1, templates = ctx.templates)
@@ -2760,8 +2721,7 @@ def p_c_func_or_var_declaration(s, pos, ctx, decorators=None):
     return result
 
 def p_ctypedef_statement(s, pos, ctx):
-    _LOG.debug('p_ctypedef_statement(s=<s sy:%s systring:%s>)'
-               % (s.sy, s.systring))
+    _LOG.debug('p_ctypedef_statement(s=<s sy:%s systring:%s>)' % (s.sy, s.systring))
     if s.sy == 'class':
         return p_c_class_definition(s, pos, ctx)
     elif s.sy == 'IDENT' and s.systring in ('packed', 'struct', 'union', 'enum'):
@@ -2782,8 +2742,7 @@ def p_ctypedef_statement(s, pos, ctx):
             in_pxd = ctx.level == 'module_pxd')
 
 def p_decorators(s):
-    _LOG.debug('p_decorators(s=<s sy:%s systring:%s>)'
-               % (s.sy, s.systring))
+    _LOG.debug('p_decorators(s=<s sy:%s systring:%s>)' % (s.sy, s.systring))
     decorators = []
     while s.sy == 'DECORATOR':
         pos = s.position()
@@ -2803,8 +2762,7 @@ def p_decorators(s):
 
 def p_def_statement(s, decorators=None):
     # s.sy == 'def'
-    _LOG.debug('p_def_statement(s=<s sy:%s systring:%s>)'
-               % (s.sy, s.systring))
+    _LOG.debug('p_def_statement(s=<s sy:%s systring:%s>)' % (s.sy, s.systring))
     pos = s.position()
     s.next()
     name = EncodedString( p_ident(s) )
@@ -2824,8 +2782,7 @@ def p_def_statement(s, decorators=None):
         return_type_annotation = return_type_annotation)
 
 def p_varargslist(s, terminator=')', annotated=1):
-    _LOG.debug('p_varargslist(s=<s sy:%s systring:%s>)'
-               % (s.sy, s.systring))
+    _LOG.debug('p_varargslist(s=<s sy:%s systring:%s>)' % (s.sy, s.systring))
     args = p_c_arg_list(s, in_pyfunc = 1, nonempty_declarators = 1,
                         annotated = annotated)
     star_arg = None
@@ -2846,8 +2803,7 @@ def p_varargslist(s, terminator=')', annotated=1):
     return (args, star_arg, starstar_arg)
 
 def p_py_arg_decl(s, annotated = 1):
-    _LOG.debug('p_py_arg_decl(s=<s sy:%s systring:%s>)'
-               % (s.sy, s.systring))
+    _LOG.debug('p_py_arg_decl(s=<s sy:%s systring:%s>)' % (s.sy, s.systring))
     pos = s.position()
     name = p_ident(s)
     annotation = None
@@ -2858,8 +2814,7 @@ def p_py_arg_decl(s, annotated = 1):
 
 def p_class_statement(s, decorators):
     # s.sy == 'class'
-    _LOG.debug('p_class_statement(s=<s sy:%s systring:%s>)'
-               % (s.sy, s.systring))
+    _LOG.debug('p_class_statement(s=<s sy:%s systring:%s>)' % (s.sy, s.systring))
     pos = s.position()
     s.next()
     class_name = EncodedString( p_ident(s) )
@@ -2966,8 +2921,7 @@ def p_c_class_definition(s, pos,  ctx, decorators=None):
         body = body)
 
 def p_c_class_options(s):
-    _LOG.debug('p_c_class_options(s=<s sy:%s systring:%s>)'
-               % (s.sy, s.systring))
+    _LOG.debug('p_c_class_options(s=<s sy:%s systring:%s>)' % (s.sy, s.systring))
     objstruct_name = None
     typeobj_name = None
     s.expect('[')
@@ -2987,8 +2941,7 @@ def p_c_class_options(s):
     return objstruct_name, typeobj_name
 
 def p_property_decl(s):
-    _LOG.debug('p_property_decl(s=<s sy:%s systring:%s>)'
-               % (s.sy, s.systring))
+    _LOG.debug('p_property_decl(s=<s sy:%s systring:%s>)' % (s.sy, s.systring))
     pos = s.position()
     s.next() # 'property'
     name = p_ident(s)
@@ -2996,8 +2949,7 @@ def p_property_decl(s):
     return Nodes.PropertyNode(pos, name = name, doc = doc, body = body)
 
 def p_doc_string(s):
-    _LOG.debug('p_doc_string(s=<s sy:%s systring:%s>)'
-               % (s.sy, s.systring))
+    _LOG.debug('p_doc_string(s=<s sy:%s systring:%s>)' % (s.sy, s.systring))
     if s.sy == 'BEGIN_STRING':
         pos = s.position()
         kind, bytes_result, unicode_result = p_cat_string_literal(s)
@@ -3011,8 +2963,7 @@ def p_doc_string(s):
         return None
 
 def p_code(s, level=None):
-    _LOG.debug('p_code(s=<s sy:%s systring:%s>)'
-               % (s.sy, s.systring))
+    _LOG.debug('p_code(s=<s sy:%s systring:%s>)' % (s.sy, s.systring))
     body = p_statement_list(s, Ctx(level = level), first_statement = 1)
     if s.sy != 'EOF':
         s.error("Syntax error in statement [%s,%s]" % (
@@ -3022,8 +2973,7 @@ def p_code(s, level=None):
 COMPILER_DIRECTIVE_COMMENT_RE = re.compile(r"^#\s*cython:\s*((\w|[.])+\s*=.*)$")
 
 def p_compiler_directive_comments(s):
-    _LOG.debug('p_compiler_directive_comments(s=<s sy:%s systring:%s>)'
-               % (s.sy, s.systring))
+    _LOG.debug('p_compiler_directive_comments(s=<s sy:%s systring:%s>)' % (s.sy, s.systring))
     result = {}
     while s.sy == 'commentline':
         m = COMPILER_DIRECTIVE_COMMENT_RE.match(s.systring)
@@ -3038,8 +2988,7 @@ def p_compiler_directive_comments(s):
     return result
 
 def p_module(s, pxd, full_module_name):
-    _LOG.debug('p_module(<s sy:%s systring:%s>, pxd=%s, full_module_name=%s)'
-               % (s.sy, s.systring, pxd, full_module_name))
+    _LOG.debug('p_module(<s sy:%s systring:%s>, pxd=%s, full_module_name=%s)' % (s.sy, s.systring, pxd, full_module_name))
     pos = s.position()
 
     directive_comments = p_compiler_directive_comments(s)
@@ -3065,8 +3014,7 @@ def p_module(s, pxd, full_module_name):
 
 def p_cpp_class_definition(s, pos,  ctx):
     # s.sy == 'cppclass'
-    _LOG.debug('p_cpp_class_definition(s=<s sy:%s systring:%s>)'
-               % (s.sy, s.systring))
+    _LOG.debug('p_cpp_class_definition(s=<s sy:%s systring:%s>)' % (s.sy, s.systring))
     s.next()
     module_path = []
     class_name = p_ident(s)
