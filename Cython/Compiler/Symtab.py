@@ -435,15 +435,8 @@ class Scope(object):
         type.qualified_name = entry.qualified_name
         return entry
 
-    def declare_struct_or_union(self, name, kind, scope,
-            typedef_flag, pos, cname = None, visibility = 'private',
-            packed = False):
-        binding = self._WTK_setup(name, cname, visibility=visibility)
-        return self.WTK_declare_struct_or_union(binding, pos, kind, scope, typedef_flag, packed)
-
-    def WTK_declare_struct_or_union(
-        self, binding,
-        pos, kind, scope, typedef_flag, packed=False):
+    def declare_struct_or_union(self, binding, kind, scope, typedef_flag=False,
+                                packed=False, pos = None):
         # Add an entry for a struct or union definition.
         if not binding.cname:
             if self.in_cinclude or binding.c_visibility == 'public':

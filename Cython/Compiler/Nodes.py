@@ -567,12 +567,9 @@ class CFuncDeclaratorNode(CDeclaratorNode):
             for arg in func_type_args[len(func_type_args)-self.optional_arg_count:]:
                 scope.declare_var(arg.name, arg.type, arg.pos, allow_pyobject = 1)
             struct_cname = env.mangle(Naming.opt_arg_prefix, self.base.name)
-            self.op_args_struct = env.global_scope().declare_struct_or_union(name = struct_cname,
-                                        kind = 'struct',
-                                        scope = scope,
-                                        typedef_flag = 0,
-                                        pos = self.pos,
-                                        cname = struct_cname)
+            binding = Binding(name = struct_cname, cname = struct_cname)
+            self.op_args_struct = env.global_scope().declare_struct_or_union(
+                binding, kind = 'struct', scope = scope, pos = self.pos)
             self.op_args_struct.defined_in_pxd = 1
             self.op_args_struct.used = 1
 
@@ -1000,7 +997,7 @@ class CStructOrUnionDefNode(StatNode):
             scope = StructOrUnionScope(self.name)
         binding = Binding()
         binding.pull(self)
-        self.entry = env.WTK_declare_struct_or_union(
+        self.entry = env.declare_struct_or_union(
             binding, kind = self.kind, scope = scope,
             typedef_flag = self.typedef_flag, packed = self.packed,
             pos = self.pos)
@@ -3519,7 +3516,10 @@ class SingleAssignmentNode(AssignmentNode):
                         error(self.lhs.pos, "Invalid declaration.")
                     name = self.lhs.name
                     scope = StructOrUnionScope(name)
-                    env.declare_struct_or_union(name, func_name, scope, False, self.rhs.pos)
+                    binding = Binding(name = name)
+                    env.declare_struct_or_union(
+                        binding, kind = func_name, scope = scope,
+                        pos = self.rhs.pos)
                     for member, type, pos in members:
                         scope.declare_var(member, type, pos)
 
@@ -5280,8 +5280,9 @@ class FromCImportStatNode(StatNode):
                         entry.redeclared(pos)
                 else:
                     if kind == 'struct' or kind == 'union':
-                        entry = module_scope.declare_struct_or_union(name,
-                            kind = kind, scope = None, typedef_flag = 0, pos = pos)
+                        binding = Binding(name = name)
+                        entry = module_scope.declare_struct_or_union(
+                            binding, kind = kind, scope = None, pos = pos)
                     elif kind == 'class':
                         entry = module_scope.declare_c_class(name, pos = pos,
                             module_name = self.module_name)
