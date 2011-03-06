@@ -6,6 +6,7 @@ cython.declare(PyrexTypes=object, Naming=object, ExprNodes=object, Nodes=object,
                TemplateTransform=object, EncodedString=object,
                error=object, warning=object, copy=object)
 
+from Binding import Binding
 import PyrexTypes
 import Naming
 import ExprNodes
@@ -1485,8 +1486,9 @@ class CreateClosureClasses(CythonTransform):
 
         as_name = '%s_%s' % (target_module_scope.next_id(Naming.closure_class_prefix), node.entry.cname)
 
-        entry = target_module_scope.declare_c_class(name = as_name,
-            pos = node.pos, defining = True, implementing = True)
+        binding = Binding(name = as_name)
+        entry = target_module_scope.declare_c_class(
+            binding, defining = True, implementing = True, pos = node.pos)
         func_scope.scope_class = entry
         class_scope = entry.type.scope
         class_scope.is_internal = True

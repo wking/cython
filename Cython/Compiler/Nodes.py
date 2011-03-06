@@ -3276,7 +3276,7 @@ class CClassDefNode(ClassDefNode):
         binding = Binding()
         binding.pull(self)
         binding.name = self.class_name
-        self.entry = home_scope.WTK_declare_c_class(
+        self.entry = home_scope.declare_c_class(
             binding, 
             objstruct_cname = self.objstruct_name,
             base_type = self.base_type,
@@ -5284,8 +5284,9 @@ class FromCImportStatNode(StatNode):
                         entry = module_scope.declare_struct_or_union(
                             binding, kind = kind, scope = None, pos = pos)
                     elif kind == 'class':
-                        entry = module_scope.declare_c_class(name, pos = pos,
-                            module_name = self.module_name)
+                        binding = Binding(name = name)
+                        entry = module_scope.declare_c_class(
+                            binding, module_name = self.module_name, pos = pos)
                     else:
                         submodule_scope = env.context.find_module(name, relative_to = module_scope, pos = self.pos)
                         if submodule_scope.parent_module is module_scope:

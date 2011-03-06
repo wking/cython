@@ -1136,18 +1136,7 @@ class ModuleScope(Scope):
         if new_code is not None:
             self.utility_code_list.append(new_code)
 
-    def declare_c_class(self, name, pos, defining = 0, implementing = 0,
-        module_name = None, base_type = None, objstruct_cname = None,
-        typeobj_cname = None, visibility = 'private', typedef_flag = 0, api = 0,
-        buffer_defaults = None, shadow = 0):
-        binding = self._WTK_setup(name, objstruct_cname, visibility)
-        binding.api = api
-        return self.WTK_declare_c_class(
-            binding, objstruct_cname, None, base_type, defining, implementing,
-            module_name, typeobj_cname, typedef_flag, buffer_defaults, shadow,
-            pos)
-
-    def WTK_declare_c_class(
+    def declare_c_class(
         self, binding, objstruct_cname = None, type=None, base_type=None,
         defining = 0, implementing = 0, module_name = None,
         typeobj_cname = None, typedef_flag = 0, buffer_defaults = None,
