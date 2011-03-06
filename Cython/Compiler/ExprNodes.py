@@ -1394,7 +1394,8 @@ class NameNode(AtomicExprNode):
                 type = unspecified_type
             else:
                 type = py_object_type
-            self.entry = env.declare_var(self.name, type, self.pos)
+            binding = Binding(name = self.name)
+            self.entry = env.declare_var(binding, type = type, pos = self.pos)
         env.control_flow.set_state(self.pos, (self.name, 'initialized'), True)
         env.control_flow.set_state(self.pos, (self.name, 'source'), 'assignment')
         if self.entry.is_declared_generic:

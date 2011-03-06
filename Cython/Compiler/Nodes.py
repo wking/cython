@@ -563,9 +563,14 @@ class CFuncDeclaratorNode(CDeclaratorNode):
         if self.optional_arg_count:
             scope = StructOrUnionScope()
             arg_count_member = '%sn' % Naming.pyrex_prefix
-            scope.declare_var(arg_count_member, PyrexTypes.c_int_type, self.pos)
+            binding = Binding(name = arg_count_member)
+            scope.declare_var(
+                binding, type = PyrexTypes.c_int_type, pos = self.pos)
             for arg in func_type_args[len(func_type_args)-self.optional_arg_count:]:
-                scope.declare_var(arg.name, arg.type, arg.pos, allow_pyobject = 1)
+                binding = Binding(name = arg.name)
+                scope.declare_var(
+                    binding, type = arg.type, allow_pyobject = 1,
+                    pos = arg.pos)
             struct_cname = env.mangle(Naming.opt_arg_prefix, self.base.name)
             binding = Binding(name = struct_cname, cname = struct_cname)
             self.op_args_struct = env.global_scope().declare_struct_or_union(
@@ -969,7 +974,7 @@ class CVarDefNode(StatNode):
                 if self.in_pxd and not self.extern:
                     error(self.pos,
                         "Only 'extern' C variable declaration allowed in .pxd file")
-                entry = dest_scope.WTK_declare_var(
+                entry = dest_scope.declare_var(
                     binding, type = type, is_cdef = 1, pos = declarator.pos)
                 entry.needs_property = need_property
 
@@ -2188,6 +2193,8 @@ class DefNode(FuncDefNode):
         if entry and entry.type.is_cfunction and not self.is_wrapper:
             warning(self.pos, "Overriding cdef method with def method.", 5)
         binding = Binding(name = name)
+        if env.is_c_class_scope:
+            binding.extern = True
         entry = env.declare_pyfunction(
             binding, allow_redefine=not self.is_wrapper, pos = self.pos)
         self.entry = entry
@@ -2230,7 +2237,9 @@ class DefNode(FuncDefNode):
                 env.control_flow.set_state((), (arg.name, 'source'), 'arg')
                 env.control_flow.set_state((), (arg.name, 'initialized'), True)
             if arg.needs_conversion:
-                arg.entry = env.declare_var(arg.name, arg.type, arg.pos)
+                binding = Binding(name = arg.name)
+                arg.entry = env.declare_var(
+                    binding, type = arg.type, pos = arg.pos)
                 if arg.type.is_pyobject:
                     arg.entry.init = "0"
                 arg.entry.init_to_none = 0
@@ -2251,7 +2260,8 @@ class DefNode(FuncDefNode):
                 type = PyrexTypes.unspecified_type
             else:
                 type = py_object_type
-            entry = env.declare_var(arg.name, type, arg.pos)
+            binding = Binding(name = arg.name)
+            entry = env.declare_var(binding, type = type, pos = arg.pos)
             entry.used = 1
             entry.init = "0"
             entry.init_to_none = 0
@@ -3395,7 +3405,10 @@ class ExprStatNode(StatNode):
                     if type is None:
                         error(type_node.pos, "Unknown type")
                     else:
-                        env.declare_var(var.value, type, var.pos, is_cdef = True)
+                        binding = Binding(name = var.value)
+                        env.declare_var(
+                            binding, type = type, is_cdef = True,
+                            pos = var.pos)
                 self.__class__ = PassStatNode
 
     def analyse_expressions(self, env):
@@ -3482,7 +3495,10 @@ class SingleAssignmentNode(AssignmentNode):
                             error(lhs.pos, "Invalid declaration")
                             return
                         for var, pos in vars:
-                            env.declare_var(var, type, pos, is_cdef = True)
+                            binding = Binding(name = var)
+                            env.declare_var(
+                                binding, type = type, is_cdef = True,
+                                pos = pos)
                         if len(args) == 2:
                             # we have a value
                             self.rhs = args[1]
@@ -3521,7 +3537,8 @@ class SingleAssignmentNode(AssignmentNode):
                         binding, kind = func_name, scope = scope,
                         pos = self.rhs.pos)
                     for member, type, pos in members:
-                        scope.declare_var(member, type, pos)
+                        binding = Binding(name = member)
+                        scope.declare_var(binding, type = type, pos = pos)
 
         if self.declaration_only:
             return

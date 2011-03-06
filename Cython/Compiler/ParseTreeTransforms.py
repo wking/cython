@@ -1091,7 +1091,8 @@ if VALUE is not None:
             if not lenv.lookup_here(var):   # don't redeclare args
                 type = type_node.analyse_as_type(lenv)
                 if type:
-                    lenv.declare_var(var, type, type_node.pos)
+                    binding = Binding(name = var)
+                    lenv.declare_var(binding, type = type, pos = type_node.pos)
                 else:
                     error(type_node.pos, "Not a type")
         node.body.analyse_declarations(lenv)
@@ -1496,18 +1497,16 @@ class CreateClosureClasses(CythonTransform):
 
         if from_closure:
             assert cscope.is_closure_scope
-            class_scope.declare_var(pos=node.pos,
-                                    name=Naming.outer_scope_cname,
-                                    cname=Naming.outer_scope_cname,
-                                    type=cscope.scope_class.type,
-                                    is_cdef=True)
+            binding = Binding(
+                name=Naming.outer_scope_cname, cname=Naming.outer_scope_cname)
+            class_scope.declare_var(
+                binding, type=cscope.scope_class.type, is_cdef=True,
+                pos=node.pos)
             node.needs_outer_scope = True
         for name, entry in in_closure:
-            class_scope.declare_var(pos=entry.pos,
-                                    name=entry.name,
-                                    cname=entry.cname,
-                                    type=entry.type,
-                                    is_cdef=True)
+            binding = Binding(name=entry.name, cname=entry.cname)
+            class_scope.declare_var(
+                binding, type=entry.type, is_cdef=True, pos=entry.pos)
         node.needs_closure = True
         # Do it here because other classes are already checked
         target_module_scope.check_c_class(func_scope.scope_class)

@@ -1190,8 +1190,10 @@ class CComplexType(CNumericType):
                     extern=1)
             scope.parent_type = self
             scope.directives = {}
-            scope.declare_var("real", self.real_type, None, "real", is_cdef=True)
-            scope.declare_var("imag", self.real_type, None, "imag", is_cdef=True)
+            binding = Binding(name = 'real', cname = 'real')
+            scope.declare_var(binding, type = self.real_type, is_cdef=True)
+            binding = Binding(name = 'imag', cname = 'imag')
+            scope.declare_var(binding, type = self.real_type, is_cdef=True)
             binding = Binding(
                 name = 'conjugate', cname = '__Pyx_c_conj%s' % self.funcsuffix)
             func_type = CFuncType(

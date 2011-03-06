@@ -557,14 +557,7 @@ class Scope(object):
         self.sue_entries.append(entry)
         return entry
 
-    def declare_var(self, name, type, pos,
-            cname = None, visibility = 'private', is_cdef = 0):
-        binding = self._WTK_setup(name, cname, visibility)
-        return self.WTK_declare_var(
-            binding, type, is_cdef, pos = pos)
-
-    def WTK_declare_var(self, binding, type,
-                        is_cdef = 0, pos = None):
+    def declare_var(self, binding, type, is_cdef = 0, pos = None):
         # Add an entry for a variable.
         if not binding.cname:
             if binding.c_visibility != 'private':
@@ -589,7 +582,7 @@ class Scope(object):
         if entry and not entry.type.is_cfunction:
             error(pos, "'%s' already declared" % binding.name)
             error(entry.pos, "Previous declaration is here")
-        entry = self.WTK_declare_var(binding, py_object_type, pos = pos)
+        entry = self.declare_var(binding, py_object_type, pos = pos)
         entry.signature = pyfunction_signature
         self.pyfunc_entries.append(entry)
         return entry
@@ -610,10 +603,10 @@ class Scope(object):
                 return self._declare_pyfunction(
                     binding, entry = entry, pos = pos)
         else: # declare entry stub
-            self.WTK_declare_var(
-                binding, py_object_type, pos = pos)
-        entry = self.WTK_declare_var(Binding(name=None, cname=binding.name),
-                                     py_object_type, pos = pos)
+            self.declare_var(binding, py_object_type, pos = pos)
+        entry = self.declare_var(
+            Binding(name=None, cname=binding.name),
+            py_object_type, pos = pos)
         entry.name = EncodedString(binding.name)
         entry.qualified_name = self.qualify_name(binding.name)
         entry.signature = pyfunction_signature
@@ -622,7 +615,7 @@ class Scope(object):
 
     def declare_lambda_function(self, binding, pos = None):
         # Add an entry for an anonymous Python function.
-        entry = self.WTK_declare_var(binding, py_object_type, pos = pos)
+        entry = self.declare_var(binding, py_object_type, pos = pos)
         entry.name = EncodedString(binding.cname)
         entry.func_cname = binding.cname
         entry.signature = pyfunction_signature
@@ -739,7 +732,7 @@ class Scope(object):
         entry = self.lookup_here(name)
         if not entry:
             binding = self._WTK_setup(name, None, 'private')
-            entry = self.WTK_declare_var(binding, py_object_type)
+            entry = self.declare_var(binding, py_object_type)
         return entry
 
     def lookup_type(self, name):
@@ -813,7 +806,7 @@ class BuiltinScope(Scope):
         for name, definition in self.builtin_entries.iteritems():
             cname, type = definition
             binding = self._WTK_setup(name, cname, 'private')
-            self.WTK_declare_var(binding, type)
+            self.declare_var(binding, type)
 
     def lookup(self, name, language_level=None):
         # 'language_level' is passed by ModuleScope
@@ -969,7 +962,8 @@ class ModuleScope(Scope):
         self.undeclared_cached_builtins = []
         self.namespace_cname = self.module_cname
         for name in ['__builtins__', '__name__', '__file__', '__doc__']:
-            self.declare_var(EncodedString(name), py_object_type, None)
+            binding = Binding(name = EncodedString(name))
+            self.declare_var(binding, type = py_object_type)
 
     def qualifying_scope(self):
         return self.parent_module
@@ -988,8 +982,7 @@ class ModuleScope(Scope):
             and binding.name != 'xrange'):
             # 'xrange' is special cased in Code.py
             if self.has_import_star:
-                entry = self.WTK_declare_var(
-                    binding, py_object_type, pos = pos)
+                entry = self.declare_var(binding, py_object_type, pos = pos)
                 return entry
             elif self.outer_scope is not None:
                 return self.outer_scope.declare_builtin(binding, pos = pos)
@@ -1078,25 +1071,19 @@ class ModuleScope(Scope):
                 warning(pos, "'%s' redeclared  " % scope.name, 0)
                 return None
         else:
-            entry = self.declare_var(as_name, py_object_type, pos)
+            binding = Binding(name=as_name)
+            entry = self.declare_var(binding, type =py_object_type, pos = pos)
         entry.as_module = scope
         self.add_imported_module(scope)
         return entry
 
-    def declare_var(self, name, type, pos,
-            cname = None, visibility = 'private', is_cdef = 0):
-        binding = self._WTK_setup(name, cname, visibility)
-        return self.WTK_declare_var(
-            binding, type, is_cdef, pos = pos)
-
-    def WTK_declare_var(self, binding, type,
-                        is_cdef = 0, pos = None):
+    def declare_var(self, binding, type, is_cdef = 0, pos = None):
         # Add an entry for a global variable. If it is a Python
         # object type, and not declared with cdef, it will live
         # in the module dictionary, otherwise it will be a C
         # global variable.
-        entry = Scope.WTK_declare_var(
-            self, binding, type, is_cdef, pos = pos)
+        entry = Scope.declare_var(
+            self, binding, type, is_cdef = is_cdef, pos = pos)
         if binding.c_visibility not in ('private', 'public'):
             error(pos, "Module-level variable cannot be declared %s" %
                   binding.c_visibility)
@@ -1118,7 +1105,7 @@ class ModuleScope(Scope):
         entry = self.lookup_here(name)
         if not entry:
             binding = self._WTK_setup(name, name, 'private')
-            self.WTK_declare_var(binding, py_object_type, pos = pos)
+            self.declare_var(binding, type = py_object_type, pos = pos)
 
     def use_utility_code(self, new_code):
         if new_code is not None:
@@ -1395,20 +1382,11 @@ class LocalScope(Scope):
         self.control_flow.set_state((), (binding.name, 'source'), 'arg')
         return entry
 
-    def declare_var(self, name, type, pos,
-            cname = None, visibility = 'private', is_cdef = 0):
-        binding = self._WTK_setup(name, cname, visibility)
-        return self.WTK_declare_var(
-            binding, type, is_cdef, pos = pos)
-
-    def WTK_declare_var(self, binding, type,
-                        is_cdef = 0, pos = None):
+    def declare_var(self, binding, type, is_cdef = 0, pos = None):
         # Add an entry for a local variable.
         if binding.c_visibility != 'private': #visibility in ('public', 'readonly'):
             error(pos, "Local variable cannot be declared %s" % binding.c_visibility)
-        entry = Scope.WTK_declare_var(
-            self, binding, type, is_cdef,
-            pos = pos)
+        entry = Scope.declare_var(self, binding, type, is_cdef, pos = pos)
         if type.is_pyobject and not Options.init_local_none:
             entry.init = "0"
         entry.init_to_none = (type.is_pyobject or type.is_unspecified) and Options.init_local_none
@@ -1477,14 +1455,7 @@ class GeneratorExpressionScope(Scope):
     def mangle(self, prefix, name):
         return '%s%s' % (self.genexp_prefix, self.parent_scope.mangle(self, prefix, name))
 
-    def declare_var(self, name, type, pos,
-                    cname = None, visibility = 'private', is_cdef = True):
-        binding = self._WTK_setup(name, cname, visibility)
-        return self.WTK_declare_var(
-            binding, type, is_cdef, pos = pos)
-
-    def WTK_declare_var(self, binding, type,
-                        is_cdef = 0, pos = None):
+    def declare_var(self, binding, type, is_cdef = 0, pos = None):
         if type is unspecified_type:
             # if the outer scope defines a type for this variable, inherit it
             outer_entry = self.outer_scope.lookup(binding.name)
@@ -1529,14 +1500,8 @@ class StructOrUnionScope(Scope):
     def __init__(self, name="?"):
         Scope.__init__(self, name, None, None)
 
-    def declare_var(self, name, type, pos,
-            cname = None, visibility = 'private', is_cdef = 0, allow_pyobject = 0):
-        binding = self._WTK_setup(name, cname, visibility)
-        return self.WTK_declare_var(
-            binding, type, is_cdef, allow_pyobject, pos = pos)
-
-    def WTK_declare_var(self, binding, type,
-                        is_cdef = 0, allow_pyobject = 0, pos = None):
+    def declare_var(self, binding, type, is_cdef = 0, allow_pyobject = 0,
+                    pos = None):
         # Add an entry for an attribute.
         if not binding.cname:
             binding.cname = binding.name
@@ -1554,7 +1519,7 @@ class StructOrUnionScope(Scope):
 
     def declare_cfunction(self, binding, type, defining = 0, in_pxd = 0,
                           modifiers = (), utility_code = None, pos = None):
-        return self.WTK_declare_var(binding, type, pos=pos)
+        return self.declare_var(binding, type = type, pos = pos)
 
 
 class ClassScope(Scope):
@@ -1598,20 +1563,12 @@ class PyClassScope(ClassScope):
 
     is_py_class_scope = 1
 
-    def declare_var(self, name, type, pos,
-            cname = None, visibility = 'private', is_cdef = 0):
-        binding = self._WTK_setup(name, cname, visibility)
-        return self.WTK_declare_var(
-            binding, type, is_cdef, pos = pos)
-
-    def WTK_declare_var(self, binding, type,
-                        is_cdef = 0, pos = None):
+    def declare_var(self, binding, type, is_cdef = 0, pos = None):
         if type is unspecified_type:
             type = py_object_type
         # Add an entry for a class attribute.
-        entry = Scope.WTK_declare_var(
-            self, binding, type, is_cdef,
-            pos = pos)
+        entry = Scope.declare_var(
+            self, binding, type = type, is_cdef = is_cdef, pos = pos)
         entry.is_pyglobal = 1
         entry.is_pyclass_attr = 1
         return entry
@@ -1655,16 +1612,7 @@ class CClassScope(ClassScope):
                 self.parent_type.base_type.scope is not None and
                 self.parent_type.base_type.scope.needs_gc())
 
-    def declare_var(self, name, type, pos,
-            cname = None, visibility = 'private', is_cdef = 0):
-        binding = self._WTK_setup(name, cname, visibility)
-        if visibility == 'private':
-            binding.visibility = 'private'
-        return self.WTK_declare_var(
-            binding, type, is_cdef, pos = pos)
-
-    def WTK_declare_var(self, binding, type,
-                        is_cdef = 0, pos = None):
+    def declare_var(self, binding, type, is_cdef = 0, pos = None):
         if is_cdef:
             # Add an entry for an attribute.
             if self.defined:
@@ -1704,8 +1652,8 @@ class CClassScope(ClassScope):
             if type is unspecified_type:
                 type = py_object_type
             # Add an entry for a class attribute.
-            entry = Scope.WTK_declare_var(
-                self, binding, type, is_cdef, pos = pos)
+            entry = Scope.declare_var(
+                self, binding, type, is_cdef = is_cdef, pos = pos)
             entry.is_member = 1
             entry.is_pyglobal = 1 # xxx: is_pyglobal changes behaviour in so many places that
                                   # I keep it in for now. is_member should be enough
@@ -1722,12 +1670,10 @@ class CClassScope(ClassScope):
         if binding.name == "__new__":
             error(pos, "__new__ method of extension type will change semantics "
                 "in a future version of Pyrex and Cython. Use __cinit__ instead.")
-        name = binding.name
-        entry = self.declare_var(name, py_object_type, pos, visibility='extern')
-        special_sig = get_special_method_signature(name)
-        #entry = self.WTK_declare_var(
-        #    binding, py_object_type, pos = pos)
-        #special_sig = get_special_method_signature(binding.name)
+        if not binding.extern:
+            error(pos, "C class pyfunctions may only be extern")
+        entry = self.declare_var(binding, type = py_object_type, pos = pos)
+        special_sig = get_special_method_signature(binding.name)
         if special_sig:
             # Special methods get put in the method table with a particular
             # signature declared in advance.
@@ -1863,14 +1809,10 @@ class CppClassScope(Scope):
         self.directives = outer_scope.directives
         self.inherited_var_entries = []
 
-    def declare_var(self, name, type, pos,
-            cname = None, visibility = 'extern', is_cdef = 0, allow_pyobject = 0):
-        binding = self._WTK_setup(name, cname, visibility)
-        return self.WTK_declare_var(
-            binding, type, is_cdef, allow_pyobject, pos = pos)
-
-    def WTK_declare_var(self, binding, type,
-                        is_cdef = 0, allow_pyobject = 0, pos = None):
+    def declare_var(self, binding, type, is_cdef = 0, allow_pyobject = 0,
+                    pos = None):
+        if not binding.extern:
+            error(pos, "c++ variables must be 'extern'")
         # Add an entry for an attribute.
         if not binding.cname:
             binding.cname = binding.name
@@ -1920,7 +1862,7 @@ class CppClassScope(Scope):
             binding.name = '<init>'
             type.return_type = self.lookup(self.name).type
         prev_entry = self.lookup_here(binding.name)
-        entry = self.WTK_declare_var(binding, type, pos = pos)
+        entry = self.declare_var(binding, type = type, pos = pos)
         if prev_entry:
             entry.overloaded_alternatives = prev_entry.all_alternatives()
         entry.utility_code = utility_code
@@ -1966,9 +1908,9 @@ class CppClassScope(Scope):
             else:
 #                binding = Binding()
 #                binding.pull(entry)
-#                scope.WTK_declare_var(
-#                    binding,
-#                    type = entry.type.specialize(values), pos = entry.pos)
+#                scope.declare_var(
+#                    binding, type = entry.type.specialize(values),
+#                    pos = entry.pos)
                 for e in entry.all_alternatives():
                     binding = Binding()
                     binding.pull(e)

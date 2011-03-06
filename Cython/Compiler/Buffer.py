@@ -1,3 +1,4 @@
+from Binding import Binding
 from Visitor import VisitorTransform, CythonTransform
 from ModuleNode import ModuleNode
 from Nodes import *
@@ -70,15 +71,18 @@ class IntroduceBufferAuxiliaryVars(CythonTransform):
 
             # Declare auxiliary vars
             cname = scope.mangle(Naming.bufstruct_prefix, name)
-            bufinfo = scope.declare_var(name="$%s" % cname, cname=cname,
-                                        type=PyrexTypes.c_py_buffer_type, pos=node.pos)
+            binding = Binding(name="$%s" % cname, cname=cname)
+            bufinfo = scope.declare_var(
+                binding, type=PyrexTypes.c_py_buffer_type, pos=node.pos)
             if entry.is_arg:
                 bufinfo.used = True # otherwise, NameNode will mark whether it is used
 
             def var(prefix, idx, initval):
                 cname = scope.mangle(prefix, "%d_%s" % (idx, name))
-                result = scope.declare_var("$%s" % cname, PyrexTypes.c_py_ssize_t_type,
-                                         node.pos, cname=cname, is_cdef=True)
+                binding = Binding(name="$%s" % cname, cname=cname)
+                result = scope.declare_var(
+                    binding, type=PyrexTypes.c_py_ssize_t_type, is_cdef=True,
+                    pos=node.pos)
 
                 result.init = initval
                 if entry.is_arg:
