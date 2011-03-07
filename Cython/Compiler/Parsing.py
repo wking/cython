@@ -2323,8 +2323,8 @@ def p_c_simple_declarator(s, ctx, empty, is_type, cmethod_flag,
                 error(s.position(), "Empty declarator")
             name = ""
             cname = None
-        if cname is None and ctx.source_namespace is not None and nonempty:
-            cname = ctx.source_namespace + "::" + name
+        if cname is None and ctx.namespace is not None and nonempty:
+            cname = ctx.namespace + "::" + name
         if name == 'operator' and ctx.extern and nonempty:
             op = s.sy
             if [1 for c in op if c in '+-*/<=>!%&|([^~,']:
@@ -2492,14 +2492,14 @@ def p_cdef_extern_block(s, pos, ctx):
     ctx.extern = 1
     if s.systring == "namespace":
         s.next()
-        ctx.source_namespace = p_string_literal(s, 'u')[2]
+        ctx.namespace = p_string_literal(s, 'u')[2]
     if p_nogil(s):
         ctx.nogil = 1
     body = p_suite(s, ctx)
     return Nodes.CDefExternNode(pos,
         include_file = include_file,
         body = body,
-        namespace = ctx.source_namespace)
+        namespace = ctx.namespace)
 
 def p_c_enum_definition(s, pos, ctx):
     # s.sy == ident 'enum'
@@ -2509,8 +2509,8 @@ def p_c_enum_definition(s, pos, ctx):
         name = s.systring
         s.next()
         cname = p_opt_cname(s)
-        if cname is None and ctx.source_namespace is not None:
-            cname = ctx.source_namespace + "::" + name
+        if cname is None and ctx.namespace is not None:
+            cname = ctx.namespace + "::" + name
     else:
         name = None
         cname = None
@@ -2558,8 +2558,8 @@ def p_c_enum_item(s, ctx, items):
     ctx = p_binding(s, ctx)
     name = p_ident(s)
     cname = p_opt_cname(s)
-    if cname is None and ctx.source_namespace is not None:
-        cname = ctx.source_namespace + "::" + name
+    if cname is None and ctx.namespace is not None:
+        cname = ctx.namespace + "::" + name
     value = None
     if s.sy == '=':
         s.next()
@@ -2584,8 +2584,8 @@ def p_c_struct_or_union_definition(s, pos, ctx):
     s.next()
     name = p_ident(s)
     cname = p_opt_cname(s)
-    if cname is None and ctx.source_namespace is not None:
-        cname = ctx.source_namespace + "::" + name
+    if cname is None and ctx.namespace is not None:
+        cname = ctx.namespace + "::" + name
     attributes = None
     if s.sy == ':':
         s.next()
@@ -3019,8 +3019,8 @@ def p_cpp_class_definition(s, pos,  ctx):
     module_path = []
     class_name = p_ident(s)
     cname = p_opt_cname(s)
-    if cname is None and ctx.source_namespace is not None:
-        cname = ctx.source_namespace + "::" + class_name
+    if cname is None and ctx.namespace is not None:
+        cname = ctx.namespace + "::" + class_name
     if s.sy == '.':
         error(pos, "Qualified class name not allowed C++ class")
     if s.sy == '[':

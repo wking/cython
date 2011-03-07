@@ -44,42 +44,32 @@ class _BindingAttributes(object):
                 self.__dict__[key] = value
 
 
-class CSource(_BindingAttributes):
-    """Configure the location of an object's C source.
-
-    * source_name (string): Source symbol name (if the symbol is
-      external)
-    * source_namespace (string): C++ namespace (`None` for C objects,
-      set if the symbol is external)
-    * cdef_flag (boolean): Symbol (data) has a C definition.
-    * extern (boolean): Symbol is defined elsewhere (otherwise a local
-      defition is created).
-    """
-    source_name = None
-    source_namespace = None
-    cdef_flag = 0
-    extern = 0
-
-
 class CBinding(_BindingAttributes):
     """Configure the presence and behaviour of an object's C bindings.
 
     * cname (string): Generated symbol name (or source name, is the
       symbol is external.
-    * cnamespace (string): C++ namespace (`None` for C objects)
-    * api (boolean): Add to generated header file
-    * visibility ('private'|'public'):
+    * namespace (string): C++ namespace of the source (`None` for C
+      objects, set if the symbol is external)
+    * cdef_flag (boolean): Symbol (data) has a C definition.
+    * extern (boolean): Symbol is defined elsewhere (otherwise a local
+      defition is created).
+    * visibility ('private'|'public'|'ignore'):
 
       * private: Symbol is not accessible to external C code
       * public: Symbol is accessible to external C code
+      * ignore: ? something about symbol re-definition?
 
     * const (boolean): Symbol data is readonly.
+    * api (boolean): Add to generated header file
     """
     cname = None
     namespace = None
-    api = 0
+    cdef_flag = 0
+    extern = 0
     c_visibility = 'private'
     const = 0
+    api = 0
 
 
 class PythonBinding(_BindingAttributes):
@@ -98,11 +88,11 @@ class PythonBinding(_BindingAttributes):
       class methods.
     """
     name = None
-    visibility = 'public' #private'
+    visibility = 'public'
     overridable = 0
 
 
-class Binding(CSource, CBinding, PythonBinding):
+class Binding(CBinding, PythonBinding):
     "Combine all binding attributes in a single, flat namespace."
     def visibility_string(self):
         "Summarize binding visibility in a single string"
