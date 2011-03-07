@@ -3498,9 +3498,10 @@ class AttributeNode(ExprNode):
             if entry and entry.is_cmethod:
                 # Create a temporary entry describing the C method
                 # as an ordinary function.
-                ubcm_entry = Symtab.Entry(entry.name,
-                    "%s->%s" % (type.vtabptr_cname, entry.cname),
-                    entry.type)
+                binding = Binding(
+                    name = entry.name,
+                    cname = '%s->%s' % (type.vtabptr_cname, entry.cname))
+                ubcm_entry = Symtab.Entry(binding, type = entry.type)
                 ubcm_entry.is_cfunction = 1
                 ubcm_entry.func_cname = entry.func_cname
                 ubcm_entry.is_unbound_cmethod = 1

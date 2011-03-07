@@ -172,9 +172,8 @@ class Entry(Binding):
     prev_entry = None
     might_overflow = 0
 
-    def __init__(self, name, cname, type, pos = None, init = None):
-        self.name = name
-        self.cname = cname
+    def __init__(self, binding, type, pos = None, init = None):
+        binding.push(self)
         self.type = type
         self.pos = pos
         self.init = init
@@ -190,16 +189,6 @@ class Entry(Binding):
 
     def all_alternatives(self):
         return [self] + self.overloaded_alternatives
-
-
-class WTK_Entry(Entry):
-    # wrapper around Entry allowing a gradual transition to the new
-    # Binding attributes
-    def __init__(self, binding, type, pos = None, init = None):
-        Entry.__init__(
-            self, name=binding.name, cname=binding.cname,
-            type=type, pos = pos, init=init)
-        binding.push(self)
 
 
 class Scope(object):
@@ -351,7 +340,7 @@ class Scope(object):
                 warning(pos, "'%s' redeclared " % binding.name, 0)
             elif binding.c_visibility != 'ignore':
                 error(pos, "'%s' redeclared " % binding.name)
-        entry = WTK_Entry(binding, type, pos = pos)
+        entry = Entry(binding, type = type, pos = pos)
         entry.in_cinclude = self.in_cinclude
         if binding.name:
             entry.qualified_name = self.qualify_name(binding.name)
@@ -818,8 +807,9 @@ class BuiltinScope(Scope):
                 python_equiv = binding.name
             else:
                 python_equiv = EncodedString(python_equiv)
-            var_entry = WTK_Entry(
-                Binding(name=python_equiv, cname=python_equiv), py_object_type)
+            var_entry = Entry(
+                Binding(name=python_equiv, cname=python_equiv),
+                type = py_object_type)
             var_entry.is_variable = 1
             var_entry.is_builtin = 1
             var_entry.utility_code = utility_code
@@ -842,7 +832,7 @@ class BuiltinScope(Scope):
         entry = self.declare_type(binding, type)
         entry.utility_code = utility_code
 
-        var_entry = WTK_Entry(
+        var_entry = Entry(
             binding.deepcopy(cname="((PyObject*)%s)" % entry.type.typeptr_cname),
             type = self.lookup('type').type, # make sure "type" is the first type declared...
             pos = entry.pos)
@@ -1325,10 +1315,11 @@ class ModuleScope(Scope):
         # we use a read-only C global variable whose name is an
         # expression that refers to the type object.
         import Builtin
-        var_entry = Entry(name = entry.name,
-            type = Builtin.type_type,
-            pos = entry.pos,
+        binding = Binding(
+            name = entry.name,
             cname = "((PyObject*)%s)" % entry.type.typeptr_cname)
+        var_entry = Entry(
+            binding, type = Builtin.type_type, pos = entry.pos)
         var_entry.is_variable = 1
         var_entry.is_cglobal = 1
         var_entry.is_readonly = 1
@@ -1397,9 +1388,9 @@ class LocalScope(Scope):
                 # on the outside and inside, so we make a new entry
                 entry.in_closure = True
                 # Would it be better to declare_var here?
+                binding = Binding(name = entry.name, cname = entry.cname)
                 inner_entry = Entry(
-                    entry.name, entry.cname,
-                    entry.type, entry.pos)
+                    binding, type = entry.type, pos = entry.pos)
                 inner_entry.scope = self
                 inner_entry.is_variable = True
                 inner_entry.outer_entry = entry
@@ -1528,12 +1519,12 @@ class ClassScope(Scope):
             # Don't want to add a cfunction to this scope 'cause that would mess with
             # the type definition, so we just return the right entry.
             self.use_utility_code(classmethod_utility_code)
-            entry = Entry(
-                "classmethod",
-                "__Pyx_Method_ClassMethod",
-                PyrexTypes.CFuncType(
-                    py_object_type,
-                    [PyrexTypes.CFuncTypeArg("", py_object_type, None)], 0, 0))
+            binding = Binding(
+                name = 'classmethod', cname = "__Pyx_Method_ClassMethod")
+            entry_type = PyrexTypes.CFuncType(
+                py_object_type,
+                [PyrexTypes.CFuncTypeArg("", py_object_type, None)], 0, 0)
+            entry = Entry(binding, type = entry_type)
             entry.is_cfunction = 1
         return entry
 
@@ -1733,7 +1724,7 @@ class CClassScope(ClassScope):
         #                               utility_code = utility_code)
         entry = self.declare_cfunction(
             binding, type=type, utility_code = utility_code)
-        var_entry = WTK_Entry(
+        var_entry = Entry(
             Binding(name=binding.name, cname=binding.name), py_object_type)
         var_entry.is_variable = 1
         var_entry.is_builtin = 1
