@@ -916,7 +916,6 @@ class CComplexBaseTypeNode(CBaseTypeNode):
 class CVarDefNode(StatNode):
     #  C variable definition or forward/extern function declaration.
     #
-    #  extern        (same as Binding.extern)
     #  c_visibility  (same as Binding.c_visibility)
     #  visibility    (same as Binding.visibility)
     #  base_type     CBaseTypeNode
@@ -949,10 +948,10 @@ class CVarDefNode(StatNode):
         for declarator in self.declarators:
             name_declarator, type = declarator.analyse(base_type, env)
             if not type.is_complete():
-                if not (self.extern and type.is_array):
+                if not (self.c_visibility == 'extern' and type.is_array):
                     error(declarator.pos,
                         "Variable type '%s' is incomplete" % type)
-            if self.extern and type.is_pyobject:
+            if self.c_visibility == 'extern' and type.is_pyobject:
                 error(declarator.pos,
                     "Python object cannot be declared extern")
             name = name_declarator.name
@@ -971,7 +970,7 @@ class CVarDefNode(StatNode):
             else:
                 if self.directive_locals:
                     error(self.pos, "Decorators can only be followed by functions")
-                if self.in_pxd and not self.extern:
+                if self.in_pxd and self.c_visibility != 'extern':
                     error(self.pos,
                         "Only 'extern' C variable declaration allowed in .pxd file")
                 entry = dest_scope.declare_var(
@@ -984,7 +983,6 @@ class CStructOrUnionDefNode(StatNode):
     #  cname         (same as Binding.cname)
     #  kind          "struct" or "union"
     #  typedef_flag  boolean
-    #  extern        (same as Binding.extern)
     #  c_visibility  (same as Binding.c_visibility)
     #  visibility    (same as Binding.visibility)
     #  in_pxd        boolean
@@ -996,7 +994,7 @@ class CStructOrUnionDefNode(StatNode):
 
     def analyse_declarations(self, env):
         scope = None
-        if self.extern and self.packed:
+        if self.c_visibility == 'extern' and self.packed:
             error(self.pos, "Cannot declare extern struct as 'packed'")
         if self.attributes is not None:
             scope = StructOrUnionScope(self.name)
@@ -1011,7 +1009,7 @@ class CStructOrUnionDefNode(StatNode):
                 self.entry.defined_in_pxd = 1
             for attr in self.attributes:
                 attr.analyse_declarations(env, scope)
-            if not self.extern:
+            if self.c_visibility != 'extern':
                 need_typedef_indirection = False
                 for attr in scope.var_entries:
                     type = attr.type
@@ -1048,8 +1046,7 @@ class CStructOrUnionDefNode(StatNode):
 class CppClassNode(CStructOrUnionDefNode):
     #  name          (same as Binding.name)
     #  cname         (same as Binding.cname)
-    #  extern        1 (same meaning as Binding.extern)
-    #  c_visibility  "public" (same as Binding.c_visibility)
+    #  c_visibility  'extern' (same as Binding.c_visibility)
     #  visibility    (same as Binding.visibility)
     #  in_pxd        boolean
     #  attributes    [CVarDefNode] or None
@@ -1093,7 +1090,6 @@ class CEnumDefNode(StatNode):
     #  cname          (same as Binding.cname)
     #  items          [CEnumDefItemNode]
     #  typedef_flag   boolean
-    #  extern         (same meaning as Binding.extern)
     #  c_visibility   (same as Binding.c_visibility)
     #  visibility     (same as Binding.visibility)
     #  in_pxd         boolean
@@ -1631,7 +1627,6 @@ class CFuncDefNode(FuncDefNode):
     #  C function definition.
     #
     #  modifiers     ['inline']
-    #  extern        (same as Binding.extern)
     #  c_visibility  (same as Binding.c_visibility)
     #  visibility    (same as Binding.visibility)
     #  base_type     CBaseTypeNode
@@ -1688,7 +1683,7 @@ class CFuncDefNode(FuncDefNode):
             modifiers = self.modifiers, pos = self.pos)
         self.entry.inline_func_in_pxd = self.inline_in_pxd
         self.return_type = type.return_type
-        if self.return_type.is_array and not self.extern:
+        if self.return_type.is_array and self.c_visibility != 'extern':
             error(self.pos,
                 "Function cannot return an array")
 
@@ -1781,14 +1776,13 @@ class CFuncDefNode(FuncDefNode):
         if cname is None:
             cname = self.entry.func_cname
         entity = type.function_header_code(cname, ', '.join(arg_decls))
-        if (self.entry.c_visibility == 'public' and
-            not self.entry.extern):
+        if self.entry.c_visibility == 'public':
             dll_linkage = "DL_EXPORT"
         else:
             dll_linkage = None
         header = self.return_type.declaration_code(entity,
             dll_linkage = dll_linkage)
-        if self.entry.extern:
+        if self.entry.c_visibility == 'extern':
             storage_class = "%s " % Naming.extern_c_macro
         elif self.entry.c_visibility == 'public':
             storage_class = ""
@@ -2008,7 +2002,6 @@ class DefNode(FuncDefNode):
                             type = cfunc_type,
                             with_gil = cfunc_type.with_gil,
                             nogil = cfunc_type.nogil,
-                            extern = 0,
                             c_visibility = 'private',
                             visibility = 'public',
                             api = False,
@@ -2194,7 +2187,7 @@ class DefNode(FuncDefNode):
             warning(self.pos, "Overriding cdef method with def method.", 5)
         binding = Binding(name = name)
         if env.is_c_class_scope:
-            binding.extern = True
+            binding.c_visibility = 'extern'
         entry = env.declare_pyfunction(
             binding, allow_redefine=not self.is_wrapper, pos = self.pos)
         self.entry = entry
@@ -3106,7 +3099,6 @@ class PyClassDefNode(ClassDefNode):
             return None
 
         return CClassDefNode(self.pos,
-                             extern = 0,
                              c_visibility = 'private',
                              visibility = 'public',
                              module_name = None,
@@ -3175,7 +3167,6 @@ class PyClassDefNode(ClassDefNode):
 class CClassDefNode(ClassDefNode):
     #  An extension type definition.
     #
-    #  extern             (same as Binding.extern)
     #  c_visibility       (same as Binding.c_visibility)
     #  visibility         (same as Binding.visibility)
     #  typedef_flag       boolean
@@ -3269,7 +3260,7 @@ class CClassDefNode(ClassDefNode):
                     else:
                         self.base_type = base_class_entry.type
         has_body = self.body is not None
-        if self.module_name and not self.extern:
+        if self.module_name and self.c_visibility != 'extern':
             module_path = self.module_name.split(".")
             home_scope = env.find_imported_module(module_path, self.pos)
             if not home_scope:
@@ -3277,7 +3268,7 @@ class CClassDefNode(ClassDefNode):
         else:
             home_scope = env
 
-        if self.extern:
+        if self.c_visibility == 'extern':
             if (self.module_name == '__builtin__' and
                 self.class_name in Builtin.builtin_types and
                 env.qualified_name[:8] != 'cpython.'): # allow overloaded names for cimporting from cpython
@@ -3300,7 +3291,7 @@ class CClassDefNode(ClassDefNode):
             pos = self.pos)
         if self.shadow:
             home_scope.lookup(self.class_name).as_variable = self.entry
-        if home_scope is not env and self.extern:
+        if home_scope is not env and self.c_visibility == 'extern':
             env.add_imported_entry(self.entry, self.class_name, pos = self.pos)
         self.scope = scope = self.entry.type.scope
         if scope is not None:

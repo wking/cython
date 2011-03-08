@@ -98,8 +98,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
     def generate_h_code(self, env, options, result):
         def h_entries(entries, pxd = 0):
             return [entry for entry in entries
-                    if (entry.c_visibility == 'public' and
-                        not entry.extern)
+                    if entry.c_visibility == 'public'
                     or pxd and entry.defined_in_pxd]
         h_types = h_entries(env.type_entries)
         h_vars = h_entries(env.var_entries)
@@ -876,7 +875,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         code.putln("")
         name = entry.type.typeobj_cname
         if name:
-            if entry.extern and not entry.in_cinclude:
+            if entry.c_visibility == 'extern' and not entry.in_cinclude:
                 code.putln("%s DL_IMPORT(PyTypeObject) %s;" % (
                     Naming.extern_c_macro,
                     name))
@@ -964,8 +963,8 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
     def generate_cfunction_predeclarations(self, env, code, definition):
         for entry in env.cfunc_entries:
             if entry.inline_func_in_pxd or (not entry.in_cinclude and (definition
-                    or entry.defined_in_pxd or entry.extern)):
-                if entry.extern or entry.c_visibility == 'public':
+                    or entry.defined_in_pxd or entry.c_visibility == 'extern')):
+                if entry.c_visibility in ('extern', 'public'):
                     dll_linkage = "DL_EXPORT"
                 else:
                     dll_linkage = None
@@ -976,7 +975,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                     dll_linkage = dll_linkage)
                 if entry.c_visibility == 'private':
                     storage_class = "static "
-                elif (entry.c_visibility == 'public' and not entry.extern):
+                elif entry.c_visibility == 'public':
                     storage_class = ""
                 else:
                     storage_class = "%s " % Naming.extern_c_macro
@@ -995,7 +994,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         for entry in env.c_class_entries:
             #print "generate_typeobj_definitions:", entry.name
             #print "...c_visibility =", entry.c_visibility
-            if not entry.extern:
+            if entry.c_visibility != 'extern':
                 type = entry.type
                 scope = type.scope
                 if scope: # could be None if there was an error
@@ -1866,7 +1865,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             rev_entries = list(env.var_entries)
             rev_entries.reverse()
             for entry in rev_entries:
-                if not entry.extern:
+                if entry.c_visibility != 'extern':
                     if entry.type.is_pyobject and entry.used:
                         code.putln("Py_DECREF(%s); %s = 0;" % (
                             code.entry_as_pyobject(entry), entry.cname))
@@ -1988,7 +1987,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         # Generate code to initialise global PyObject *
         # variables to None.
         for entry in env.var_entries:
-            if not entry.extern:
+            if entry.c_visibility != 'extern':
                 if entry.type.is_pyobject and entry.used:
                     code.put_init_var_to_py_none(entry, nanny=False)
 
@@ -2042,7 +2041,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         # Generate type import code for extern extension types
         # and type ready code for non-extern ones.
         for entry in env.c_class_entries:
-            if entry.extern:
+            if entry.c_visibility == 'extern':
                 self.generate_type_import_code(env, entry.type, entry.pos, code)
             else:
                 self.generate_base_type_import_code(env, entry, code)
@@ -2120,7 +2119,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         typeobj_cname = type.typeobj_cname
         scope = type.scope
         if scope: # could be None if there was an error
-            if not entry.extern:
+            if entry.c_visibility != 'extern':
                 for slot in TypeSlots.slot_table:
                     slot.generate_dynamic_init_code(scope, code)
                 code.putln(

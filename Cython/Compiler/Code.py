@@ -1119,7 +1119,7 @@ class CCodeWriter(object):
             #print "not used and private, skipping", entry.cname ###
             return
         storage_class = ""
-        if entry.extern:
+        if entry.c_visibility == 'extern':
             storage_class = Naming.extern_c_macro
         elif entry.c_visibility == 'public':
             if not definition:
@@ -1129,7 +1129,7 @@ class CCodeWriter(object):
                 storage_class = "static"
         if storage_class:
             self.put("%s " % storage_class)
-        if (entry.extern or entry.c_visibility != 'public'):
+        if entry.c_visibility != 'public':
             dll_linkage = None
         self.put(entry.type.declaration_code(entry.cname,
             dll_linkage = dll_linkage))

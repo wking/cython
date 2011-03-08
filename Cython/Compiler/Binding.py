@@ -52,12 +52,12 @@ class CBinding(_BindingAttributes):
     * namespace (string): C++ namespace of the source (`None` for C
       objects, set if the symbol is external)
     * cdef_flag (boolean): Symbol (data) has a C definition.
-    * extern (boolean): Symbol is defined elsewhere (otherwise a local
-      defition is created).
-    * visibility ('private'|'public'|'ignore'):
+    * visibility ('private'|'public'|'extern'|'ignore'):
 
       * private: Symbol is not accessible to external C code
       * public: Symbol is accessible to external C code
+      * extern: Symbol is defined elsewhere (otherwise a local
+        definition is created).
       * ignore: ? something about symbol re-definition?
 
     * const (boolean): Symbol data is readonly.
@@ -66,7 +66,6 @@ class CBinding(_BindingAttributes):
     cname = None
     namespace = None
     cdef_flag = 0
-    extern = 0
     c_visibility = 'private'
     const = 0
     api = 0
@@ -96,10 +95,5 @@ class Binding(CBinding, PythonBinding):
     "Combine all binding attributes in a single, flat namespace."
     def visibility_string(self):
         "Summarize binding visibility in a single string"
-        if self.extern:
-            extern_string = ' (extern)'
-        else:
-            extern_string = ''
-        return 'C: %s%s, Python: %s' % (
-            self.c_visibility, extern_string, self.visibility)
-            
+        return 'C: %s, Python: %s' % (
+            self.c_visibility, self.visibility)

@@ -348,7 +348,9 @@ class BuiltinFunction(_BuiltinOverride):
             if sig is None:
                 sig = Signature(self.args, self.ret_type)
             func_type = sig.function_type()
-        binding = Binding(name = self.py_name, cname = self.cname, extern = 1)
+        binding = Binding(
+            name = self.py_name, cname = self.cname,
+            c_visibility = 'extern')
         scope.declare_builtin_cfunction(
             binding, type = func_type, python_equiv = self.py_equiv,
             utility_code = self.utility_code)
@@ -363,7 +365,9 @@ class BuiltinMethod(_BuiltinOverride):
             self_arg = PyrexTypes.CFuncTypeArg("", self_type, None)
             self_arg.not_none = True
             method_type = sig.function_type(self_arg)
-        binding = Binding(name = self.py_name, cname = self.cname, extern = 1)
+        binding = Binding(
+            name = self.py_name, cname = self.cname,
+            c_visibility = 'extern')
         self_type.scope.declare_builtin_cfunction(
             binding, type = method_type, utility_code = self.utility_code)
 
@@ -558,7 +562,7 @@ def init_builtin_types():
         else:
             objstruct_cname = 'Py%sObject' % name.capitalize()
         binding = Binding(
-            name = name, cname = cname, extern = 1, c_visibility = 'public')
+            name = name, cname = cname, c_visibility = 'extern')
         the_type = builtin_scope.declare_builtin_type(
             binding, objstruct_cname = objstruct_cname, utility_code = utility)
         builtin_types[name] = the_type

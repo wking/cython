@@ -1820,7 +1820,7 @@ def p_statement(s, ctx, first_statement = 0):
         s.level = ctx.level
     if ctx.api:
         if ctx.cdef_flag:
-            if ctx.extern:
+            if ctx.c_visibility == 'extern':
                 error(pos, "Cannot combine 'api' with 'extern'")
         else:
             s.error("'api' not allowed with this statement")
@@ -1851,7 +1851,7 @@ def p_statement(s, ctx, first_statement = 0):
             if ctx.level not in ('module', 'function', 'class', 'other'):
                 s.error("class definition not allowed here")
         return p_class_statement(s, decorators)
-    elif s.sy == 'from' and ctx.extern:
+    elif s.sy == 'from' and ctx.c_visibility == 'extern':
         return p_cdef_extern_block(s, pos, ctx)
     elif s.sy == 'import' and ctx.cdef_flag:
         s.next()
@@ -1864,7 +1864,7 @@ def p_statement(s, ctx, first_statement = 0):
         return p_property_decl(s)
     elif ctx.cdef_flag:
         if s.sy == 'IDENT' and s.systring == 'cppclass':
-            if not ctx.extern:
+            if ctx.c_visibility != 'extern':
                 error(pos, "C++ classes need to be declared extern")
             return p_cpp_class_definition(s, pos, ctx)
         elif s.sy == 'IDENT' and s.systring in ("struct", "union", "enum", "packed"):
@@ -2323,9 +2323,11 @@ def p_c_simple_declarator(s, ctx, empty, is_type, cmethod_flag,
                 error(s.position(), "Empty declarator")
             name = ""
             cname = None
+        if name == 'Rectangle':
+            pass
         if cname is None and ctx.namespace is not None and nonempty:
             cname = ctx.namespace + "::" + name
-        if name == 'operator' and ctx.extern and nonempty:
+        if name == 'operator' and ctx.c_visibility == 'extern' and nonempty:
             op = s.sy
             if [1 for c in op if c in '+-*/<=>!%&|([^~,']:
                 s.next()
@@ -2489,7 +2491,7 @@ def p_cdef_extern_block(s, pos, ctx):
         include_file = p_string_literal(s, 'u')[2]
     ctx = ctx()
     ctx.cdef_flag = 1
-    ctx.extern = 1
+    ctx.c_visibility = 'extern'
     if s.systring == "namespace":
         s.next()
         ctx.namespace = p_string_literal(s, 'u')[2]
@@ -2519,8 +2521,7 @@ def p_c_enum_definition(s, pos, ctx):
     items = []
     # Work around overloading of the 'public' keyword.
     item_ctx = ctx()
-    if item_ctx.c_visibility == 'public':
-        item_ctx.c_visibility = 'public'
+    if item_ctx.c_visibility in ('public', 'extern'):
         item_ctx.visibility = 'public'
     else:
         item_ctx.c_visibility = 'public'
@@ -2535,9 +2536,8 @@ def p_c_enum_definition(s, pos, ctx):
         s.expect_dedent()
     return Nodes.CEnumDefNode(
         pos, name = name, cname = cname, items = items,
-        typedef_flag = ctx.typedef_flag, extern = ctx.extern,
-        c_visibility = ctx.c_visibility, visibility = ctx.visibility,
-        in_pxd = ctx.level == 'module_pxd')
+        typedef_flag = ctx.typedef_flag, c_visibility = ctx.c_visibility,
+        visibility = ctx.visibility, in_pxd = ctx.level == 'module_pxd')
 
 def p_c_enum_line(s, ctx, items):
     _LOG.debug('p_c_enum_line(s=<s sy:%s systring:%s>)' % (s.sy, s.systring))
@@ -2566,8 +2566,7 @@ def p_c_enum_item(s, ctx, items):
         value = p_test(s)
     items.append(Nodes.CEnumDefItemNode(pos,
         name = name, cname = cname, value = value,
-        extern = ctx.extern, visibility = ctx.visibility,
-        c_visibility = ctx.c_visibility,
+        c_visibility = ctx.c_visibility, visibility = ctx.visibility,
         in_pxd = ctx.level == 'module_pxd'))
 
 
@@ -2611,7 +2610,6 @@ def p_c_struct_or_union_definition(s, pos, ctx):
         typedef_flag = ctx.typedef_flag,
         cdef_flag = ctx.cdef_flag,
         overridable = ctx.overridable,
-        extern = ctx.extern,
         c_visibility = ctx.c_visibility,
         visibility = ctx.visibility,
         in_pxd = ctx.level == 'module_pxd',
@@ -2627,8 +2625,7 @@ def p_visibility(s, ctx):
             #if prev_visibility != 'private' and visibility != prev_visibility:
             #    s.error("Conflicting visibility options '%s' and '%s'"
             #            % (prev_visibility, visibility))
-            ctx.extern = 1
-            ctx.c_visibility = 'public'
+            ctx.c_visibility = 'extern'
             # Need to restore/set default value for Python visibility?
         elif outer_scope and visibility not in ('readonly',):
             ctx.c_visibility = visibility
@@ -2686,7 +2683,6 @@ def p_c_func_or_var_declaration(s, pos, ctx, decorators=None):
         result = Nodes.CFuncDefNode(pos,
             cdef_flag = ctx.cdef_flag,
             overridable = ctx.overridable,
-            extern = ctx.extern,
             c_visibility = ctx.c_visibility,
             visibility = ctx.visibility,
             base_type = base_type,
@@ -2709,7 +2705,6 @@ def p_c_func_or_var_declaration(s, pos, ctx, decorators=None):
             declarators.append(declarator)
         s.expect_newline("Syntax error in C variable declaration")
         result = Nodes.CVarDefNode(pos,
-            extern = ctx.extern,
             c_visibility = ctx.c_visibility,
             visibility = ctx.visibility,
             api = ctx.api,
@@ -2737,8 +2732,7 @@ def p_ctypedef_statement(s, pos, ctx):
         s.expect_newline("Syntax error in ctypedef statement")
         return Nodes.CTypeDefNode(
             pos, base_type = base_type, declarator = declarator,
-            extern = ctx.extern, visibility = ctx.visibility,
-            c_visibility = ctx.c_visibility,
+            c_visibility = ctx.c_visibility, visibility = ctx.visibility,
             in_pxd = ctx.level == 'module_pxd')
 
 def p_decorators(s):
@@ -2847,7 +2841,7 @@ def p_c_class_definition(s, pos,  ctx, decorators=None):
         s.next()
         module_path.append(class_name)
         class_name = p_ident(s)
-    if module_path and not ctx.extern:
+    if module_path and ctx.c_visibility != 'extern':
         error(pos, "Qualified class name only allowed for 'extern' C class")
     if module_path and s.sy == 'IDENT' and s.systring == 'as':
         s.next()
@@ -2870,7 +2864,7 @@ def p_c_class_definition(s, pos,  ctx, decorators=None):
         base_class_module = ".".join(base_class_path[:-1])
         base_class_name = base_class_path[-1]
     if s.sy == '[':
-        if not (ctx.extern or ctx.c_visibility == 'public'):
+        if ctx.c_visibility not in ('extern', 'public'):
             error(s.position(), "Name options only allowed for 'public' or 'extern' C class")
         objstruct_name, typeobj_name = p_c_class_options(s)
     if s.sy == ':':
@@ -2887,7 +2881,7 @@ def p_c_class_definition(s, pos,  ctx, decorators=None):
         s.expect_newline("Syntax error in C class definition")
         doc = None
         body = None
-    if ctx.extern:
+    if ctx.c_visibility == 'extern':
         if not module_path:
             error(pos, "Module name required for 'extern' C class")
         if typeobj_name:
@@ -2903,7 +2897,6 @@ def p_c_class_definition(s, pos,  ctx, decorators=None):
     else:
         error(pos, "Invalid class visibility '%s'" % ctx.visibility_string())
     return Nodes.CClassDefNode(pos,
-        extern = ctx.extern,
         c_visibility = ctx.c_visibility,
         visibility = ctx.visibility,
         typedef_flag = ctx.typedef_flag,
@@ -3049,9 +3042,9 @@ def p_cpp_class_definition(s, pos,  ctx):
         s.expect_indent()
         attributes = []
         body_ctx = Ctx()
-        body_ctx.c_visibility = p_visibility(s, ctx)
+        #body_ctx = p_visibility(s, body_ctx)
+        body_ctx.c_visibility = ctx.c_visibility
         body_ctx.visibility = ctx.visibility
-        body_ctx.extern = ctx.extern
         body_ctx.templates = templates
         while s.sy != 'DEDENT':
             if s.systring == 'cppclass':
@@ -3071,7 +3064,6 @@ def p_cpp_class_definition(s, pos,  ctx):
         name = class_name,
         cname = cname,
         base_classes = base_classes,
-        extern = ctx.extern,
         c_visibility = ctx.c_visibility,
         visibility = ctx.visibility,
         in_pxd = ctx.level == 'module_pxd',

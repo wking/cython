@@ -683,7 +683,7 @@ class CNumericType(CType):
             self.scope = scope = Symtab.CClassScope(
                     '',
                     None,
-                    extern=1)
+                    c_visibility='extern')
             scope.parent_type = self
             scope.directives = {}
             binding = Binding(name = 'conjugate', cname = ' ')
@@ -1187,7 +1187,7 @@ class CComplexType(CNumericType):
             self.scope = scope = Symtab.CClassScope(
                     '',
                     None,
-                    extern=1)
+                    c_visibility='extern')
             scope.parent_type = self
             scope.directives = {}
             binding = Binding(name = 'real', cname = 'real')
@@ -2019,7 +2019,7 @@ class CStructOrUnionType(CType):
                     self.to_py_function = None
                     self._convert_code = False
                     return False
-            forward_decl = not self.entry.extern
+            forward_decl = self.entry.c_visibility != 'extern'
             self._convert_code = StructUtilityCode(self, forward_decl)
         
         env.use_utility_code(self._convert_code)

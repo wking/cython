@@ -336,7 +336,7 @@ class Scope(object):
             warning(pos, "'%s' is a reserved name in C." % binding.cname, -1)
         entries = self.entries
         if binding.name and binding.name in entries and not shadow:
-            if binding.extern:
+            if binding.c_visibility == 'extern':
                 warning(pos, "'%s' redeclared " % binding.name, 0)
             elif binding.c_visibility != 'ignore':
                 error(pos, "'%s' redeclared " % binding.name)
@@ -393,7 +393,7 @@ class Scope(object):
         try:
             type = PyrexTypes.create_typedef_type(
                 binding.name, base_type, binding.cname,
-                binding.extern)
+                binding.c_visibility == 'extern')
         except ValueError, e:
             error(pos, e.args[0])
             type = PyrexTypes.error_type
@@ -442,7 +442,7 @@ class Scope(object):
     def declare_cpp_class(
         self, binding,
         pos, scope, base_classes = (), templates = None):
-        if not binding.extern:
+        if binding.c_visibility != 'extern':
             error(pos, "C++ classes may only be extern")
         if binding.cname is None:
             binding.cname = binding.name
@@ -495,8 +495,6 @@ class Scope(object):
         # `visibility`.  If there is a difference, return a string
         # representing the conflicting `entry` visibility, otherwise
         # return an empty string.
-        if binding.extern != entry.extern:
-            return 'extern'
         if binding.c_visibility != entry.c_visibility:
             return entry.c_visibility
         if binding.visibility != entry.visibility:
@@ -538,7 +536,7 @@ class Scope(object):
             else:
                 binding.cname = self.mangle(
                     Naming.var_prefix, binding.name)
-        if type.is_cpp_class and not binding.extern:
+        if type.is_cpp_class and binding.c_visibility != 'extern':
             constructor = type.scope.lookup(u'<init>')
             if constructor is not None and PyrexTypes.best_match([], constructor.all_alternatives()) is None:
                 error(pos, "C++ class must have a default constructor to be stack allocated")
@@ -564,15 +562,15 @@ class Scope(object):
         # Add an entry for a Python function.
         entry = self.lookup_here(binding.name)
         if not allow_redefine or Options.disable_function_redefinition:
-            binding.extern = 1
-            binding.c_visibility = binding.visibility = 'public'
+            binding.c_visibility = 'extern'
+            binding.visibility = 'public'
             return self._declare_pyfunction(binding, entry = entry, pos = pos)
         if entry:
             if entry.type.is_unspecified:
                 entry.type = py_object_type
             elif entry.type is not py_object_type:
-                binding.extern = 1
-                binding.c_visibility = binding.visibility = 'public'
+                binding.c_visibility = 'extern'
+                binding.visibility = 'public'
                 return self._declare_pyfunction(
                     binding, entry = entry, pos = pos)
         else: # declare entry stub
@@ -617,7 +615,7 @@ class Scope(object):
                 warning(pos, "Function '%s' previously declared as '%s'" % (
                         binding.name, vis_diff), 1)
             if not entry.type.same_as(type):
-                if binding.extern and entry.extern:
+                if binding.c_visibility == 'extern' and entry.c_visibility == 'extern':
                     can_override = False
                     if self.is_cpp():
                         can_override = True
@@ -642,9 +640,9 @@ class Scope(object):
         else:
             entry = self.add_cfunction(binding, pos, type, modifiers)
             entry.func_cname = binding.cname
-        if in_pxd and not binding.extern:
+        if in_pxd and binding.c_visibility != 'extern':
             entry.defined_in_pxd = 1
-        if not defining and not in_pxd and not binding.extern:
+        if not defining and not in_pxd and binding.c_visibility != 'extern':
             error(pos, "Non-extern C function '%s' declared but not defined" %
                   binding.name)
         if defining:
@@ -823,7 +821,7 @@ class BuiltinScope(Scope):
             binding.name, binding.cname, objstruct_cname)
         # WTK: TODO: visibility checking
         scope = CClassScope(
-            binding.name, outer_scope = None, extern = 1)
+            binding.name, outer_scope = None, c_visibility = 'extern')
         scope.directives = {}
         if binding.name == 'bool':
             scope.directives['final'] = True
@@ -1057,7 +1055,7 @@ class ModuleScope(Scope):
         # global variable.
         entry = Scope.declare_var(
             self, binding, type, is_cdef = is_cdef, pos = pos)
-        if binding.c_visibility not in ('private', 'public'):
+        if binding.c_visibility not in ('private', 'public', 'extern'):
             error(pos, "Module-level variable cannot be declared %s" %
                   binding.c_visibility)
         if not is_cdef:
@@ -1092,7 +1090,7 @@ class ModuleScope(Scope):
         # If this is a non-extern typedef class, expose the typedef, but use
         # the non-typedef struct internally to avoid needing forward
         # declarations for anonymous structs.
-        if typedef_flag and not binding.extern:
+        if typedef_flag and binding.c_visibility != 'extern':
             if binding.c_visibility != 'public':
                 warning(pos, "ctypedef only valid for public and extern classes", 2)
             objtypedef_cname = objstruct_cname
@@ -1122,12 +1120,12 @@ class ModuleScope(Scope):
         if not entry or shadow:
             type = PyrexTypes.PyExtensionType(
                 binding.name, typedef_flag, base_type,
-                is_external = binding.extern)
+                is_external = binding.c_visibility == 'extern')
             type.pos = pos
             type.buffer_defaults = buffer_defaults
             if objtypedef_cname is not None:
                 type.objtypedef_cname = objtypedef_cname
-            if binding.extern:
+            if binding.c_visibility == 'extern':
                 type.module_name = module_name
             else:
                 type.module_name = self.qualified_name
@@ -1138,7 +1136,7 @@ class ModuleScope(Scope):
             entry.is_cclass = True
             if objstruct_cname:
                 type.objstruct_cname = objstruct_cname
-            elif binding.extern or binding.c_visibility != 'public':
+            elif binding.c_visibility != 'public':
                 binding.cname = self.mangle(
                     Naming.objstruct_prefix, binding.name)
                 type.objstruct_cname = binding.cname
@@ -1155,7 +1153,7 @@ class ModuleScope(Scope):
                 scope = CClassScope(
                     name = binding.name,
                     outer_scope = self,
-                    extern = binding.extern)
+                    c_visibility = binding.c_visibility)
                 if base_type and base_type.scope:
                     scope.declare_inherited_c_attributes(base_type.scope)
                 type.set_scope(scope)
@@ -1251,7 +1249,7 @@ class ModuleScope(Scope):
         if not type.scope:
             error(entry.pos, "C class '%s' is declared but not defined" % name)
         # Generate typeobj_cname
-        if not entry.extern and not type.typeobj_cname:
+        if entry.c_visibility != 'extern' and not type.typeobj_cname:
             type.typeobj_cname = self.mangle(Naming.typeobj_prefix, name)
         ## Generate typeptr_cname
         #type.typeptr_cname = self.mangle(Naming.typeptr_prefix, name)
@@ -1288,9 +1286,7 @@ class ModuleScope(Scope):
             if debug_check_c_classes:
                 print("...entry %s %s" % (entry.name, entry))
                 print("......type = ",  entry.type)
-                print("......extern = ", entry.extern)
-                print("......binding.c_visibility = ",
-                      entry.c_visibility)
+                print("......binding.c_visibility = ", entry.c_visibility)
                 print("......binding.visibility = ",
                       entry.python.binding.visibility)
             self.check_c_class(entry)
@@ -1302,7 +1298,7 @@ class ModuleScope(Scope):
             if entry.is_cfunction:
                 if (entry.defined_in_pxd
                         and entry.scope is self
-                        and not entry.extern
+                        and entry.c_visibility != 'extern'
                         and not entry.in_cinclude
                         and not entry.is_implemented):
                     error(entry.pos, "Non-extern C function '%s' declared but not defined" % name)
@@ -1566,9 +1562,9 @@ class CClassScope(ClassScope):
 
     is_c_class_scope = 1
 
-    def __init__(self, name, outer_scope, extern):
+    def __init__(self, name, outer_scope, c_visibility):
         ClassScope.__init__(self, name, outer_scope)
-        if not extern:
+        if c_visibility != 'extern':
             self.method_table_cname = outer_scope.mangle(Naming.methtab_prefix, name)
             self.getset_table_cname = outer_scope.mangle(Naming.gstab_prefix, name)
         self.has_pyobject_attrs = 0
@@ -1600,7 +1596,7 @@ class CClassScope(ClassScope):
                 binding.cname = binding.name
                 if binding.c_visibility == 'private':
                     binding.cname = c_safe_identifier(binding.cname)
-            if type.is_cpp_class and not binding.extern:
+            if type.is_cpp_class and binding.c_visibility != 'extern':
                 error(pos, "C++ classes not allowed as members of an extension type, use a pointer or reference instead")
             entry = self.declare(binding, type, pos = pos)
             entry.is_variable = 1
@@ -1615,9 +1611,9 @@ class CClassScope(ClassScope):
                 if binding.name == "__weakref__":
                     error(pos, "Special attribute __weakref__ cannot be exposed to Python")
                 if not type.is_pyobject:
-                    #print 'XXX', binding.name, binding.extern, binding.c_visibility, binding.visibility, type.create_to_py_utility_code(self), type.__class__  ####### XXXXX BUG! (cimportfrom_T248)
+                    #print 'XXX', binding.name, binding.c_visibility == 'extern', binding.c_visibility, binding.visibility, type.create_to_py_utility_code(self), type.__class__  ####### XXXXX BUG! (cimportfrom_T248)
                     if not type.create_to_py_utility_code(self):
-                        #print 'XXX', binding.name, binding.extern, binding.c_visibility, binding.visibility  ####### XXXXX BUG! (cimportfrom_T248)
+                        #print 'XXX', binding.name, binding.c_visibility == 'extern', binding.c_visibility, binding.visibility  ####### XXXXX BUG! (cimportfrom_T248)
                         error(pos,
                               "C attribute of type '%s' cannot be accessed from Python" % type)
             return entry
@@ -1643,7 +1639,7 @@ class CClassScope(ClassScope):
         if binding.name == "__new__":
             error(pos, "__new__ method of extension type will change semantics "
                 "in a future version of Pyrex and Cython. Use __cinit__ instead.")
-        if not binding.extern:
+        if binding.c_visibility != 'extern':
             error(pos, "C class pyfunctions may only be extern")
         entry = self.declare_var(binding, type = py_object_type, pos = pos)
         special_sig = get_special_method_signature(binding.name)
@@ -1685,7 +1681,6 @@ class CClassScope(ClassScope):
                 if type.same_c_signature_as(entry.type, as_cmethod = 1) and type.nogil == entry.type.nogil:
                     pass
                 elif type.compatible_signature_with(entry.type, as_cmethod = 1) and type.nogil == entry.type.nogil:
-                    binding.extern = 0
                     binding.c_visibility = 'ignore'
                     binding.visibility = 'public'
                     entry = self.add_cfunction(binding, pos, type, modifiers)
@@ -1720,8 +1715,6 @@ class CClassScope(ClassScope):
         # overridden methods of builtin types still have their Python
         # equivalent that must be accessible to support bound methods
         binding.name = EncodedString(binding.name)
-        #entry = self.declare_cfunction(binding.name, type, None, binding.cname, visibility='extern',
-        #                               utility_code = utility_code)
         entry = self.declare_cfunction(
             binding, type=type, utility_code = utility_code)
         var_entry = Entry(
@@ -1783,7 +1776,7 @@ class CppClassScope(Scope):
 
     def declare_var(self, binding, type, is_cdef = 0, allow_pyobject = 0,
                     pos = None):
-        if not binding.extern:
+        if binding.c_visibility != 'extern':
             error(pos, "c++ variables must be 'extern'")
         # Add an entry for an attribute.
         if not binding.cname:
@@ -1827,7 +1820,7 @@ class CppClassScope(Scope):
 
     def declare_cfunction(self, binding, type, defining = 0, in_pxd = 0,
                           modifiers = (), utility_code = None, pos = None):
-        if not binding.extern:
+        if binding.c_visibility != 'extern':
             error(pos, "c++ cfunctions must be 'extern'")
         if binding.name == self.name.split('::')[-1] and binding.cname is None:
             self.check_base_default_constructor(pos)
@@ -1855,8 +1848,7 @@ class CppClassScope(Scope):
                 binding = Binding(
                     name = base_entry.name,
                     cname = base_entry.cname,
-                    extern = True,
-                    c_visibility = 'public')
+                    c_visibility = 'extern')
                 entry = self.declare(
                     binding, type = base_entry.type)
                 entry.is_variable = 1
