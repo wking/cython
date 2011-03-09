@@ -2,7 +2,6 @@
 #   Pyrex - Builtin Definitions
 #
 
-from Binding import Binding
 from Symtab import BuiltinScope, StructOrUnionScope
 from Code import UtilityCode
 from TypeSlots import Signature
@@ -337,8 +336,7 @@ class BuiltinAttribute(object):
             field_type = builtin_scope.lookup(self.field_type_name).type
         else:
             field_type = self.field_type or PyrexTypes.py_object_type
-        binding = Binding(name=self.py_name, cname=self.cname)
-        entry = self_type.scope.declare(binding, type = field_type)
+        entry = self_type.scope.declare(name=self.py_name, cname=self.cname, type = field_type)
         entry.is_variable = True
 
 class BuiltinFunction(_BuiltinOverride):
@@ -348,11 +346,8 @@ class BuiltinFunction(_BuiltinOverride):
             if sig is None:
                 sig = Signature(self.args, self.ret_type)
             func_type = sig.function_type()
-        binding = Binding(
-            name = self.py_name, cname = self.cname,
-            c_visibility = 'extern')
         scope.declare_builtin_cfunction(
-            binding, type = func_type, python_equiv = self.py_equiv,
+            name = self.py_name, cname = self.cname, c_visibility = 'extern', type = func_type, python_equiv = self.py_equiv,
             utility_code = self.utility_code)
 
 class BuiltinMethod(_BuiltinOverride):
@@ -365,11 +360,8 @@ class BuiltinMethod(_BuiltinOverride):
             self_arg = PyrexTypes.CFuncTypeArg("", self_type, None)
             self_arg.not_none = True
             method_type = sig.function_type(self_arg)
-        binding = Binding(
-            name = self.py_name, cname = self.cname,
-            c_visibility = 'extern')
         self_type.scope.declare_builtin_cfunction(
-            binding, type = method_type, utility_code = self.utility_code)
+            name = self.py_name, cname = self.cname, c_visibility = 'extern', type = method_type, utility_code = self.utility_code)
 
 
 builtin_function_table = [
@@ -561,10 +553,8 @@ def init_builtin_types():
             objstruct_cname = None
         else:
             objstruct_cname = 'Py%sObject' % name.capitalize()
-        binding = Binding(
-            name = name, cname = cname, c_visibility = 'extern')
         the_type = builtin_scope.declare_builtin_type(
-            binding, objstruct_cname = objstruct_cname, utility_code = utility)
+            name = name, cname = cname, c_visibility = 'extern', objstruct_cname = objstruct_cname, utility_code = utility)
         builtin_types[name] = the_type
         for method in methods:
             method.declare_in_type(the_type)
@@ -573,12 +563,10 @@ def init_builtin_structs():
     for name, cname, attribute_types in builtin_structs_table:
         scope = StructOrUnionScope(name)
         for attribute_name, attribute_type in attribute_types:
-            binding = Binding(name = attribute_name, cname = attribute_name)
             scope.declare_var(
-                binding, type = attribute_type, allow_pyobject=True)
-        binding = Binding(name = name, cname = cname)
+                name = attribute_name, cname = attribute_name, type = attribute_type, allow_pyobject=True)
         builtin_scope.declare_struct_or_union(
-            binding, kind = 'struct', scope = scope, typedef_flag = True)
+            name = name, cname = cname, kind = 'struct', scope = scope, typedef_flag = True)
 
 def init_builtins():
     init_builtin_structs()

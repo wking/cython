@@ -16,7 +16,6 @@ import operator
 
 from Errors import error, warning, warn_once, InternalError, CompileError
 from Errors import hold_errors, release_errors, held_errors, report_error
-from Binding import Binding
 from Code import UtilityCode
 import StringEncoding
 import Naming
@@ -1244,10 +1243,8 @@ class NewExprNode(AtomicExprNode):
         if constructor is None:
             return_type = PyrexTypes.CFuncType(type, [])
             return_type = PyrexTypes.CPtrType(return_type)
-            binding = Binding(
-                name = u'<init>', c_visibility = 'extern')
             type.scope.declare_cfunction(
-                binding, type = return_type, pos = self.pos)
+                name = u'<init>', c_visibility = 'extern', type = return_type, pos = self.pos)
             constructor = type.scope.lookup(u'<init>')
         self.class_type = type
         self.entry = constructor
@@ -1339,9 +1336,8 @@ class NameNode(AtomicExprNode):
                 var_entry = entry.as_variable
                 if var_entry:
                     if var_entry.is_builtin and Options.cache_builtins:
-                        binding = Binding(name = var_entry.name)
                         var_entry = env.declare_builtin(
-                            binding, pos = self.pos)
+                            name = var_entry.name, pos = self.pos)
                     node = NameNode(self.pos, name = self.name)
                     node.entry = var_entry
                     node.analyse_rvalue_entry(env)
@@ -1394,8 +1390,7 @@ class NameNode(AtomicExprNode):
                 type = unspecified_type
             else:
                 type = py_object_type
-            binding = Binding(name = self.name)
-            self.entry = env.declare_var(binding, type = type, pos = self.pos)
+            self.entry = env.declare_var(name = self.name, type = type, pos = self.pos)
         env.control_flow.set_state(self.pos, (self.name, 'initialized'), True)
         env.control_flow.set_state(self.pos, (self.name, 'source'), 'assignment')
         if self.entry.is_declared_generic:
@@ -1405,8 +1400,7 @@ class NameNode(AtomicExprNode):
         if self.entry is None:
             self.entry = env.lookup(self.name)
         if not self.entry:
-            binding = Binding(name = self.name)
-            self.entry = env.declare_builtin(binding, pos = self.pos)
+            self.entry = env.declare_builtin(name = self.name, pos = self.pos)
         if not self.entry:
             self.type = PyrexTypes.error_type
             return
@@ -3498,10 +3492,7 @@ class AttributeNode(ExprNode):
             if entry and entry.is_cmethod:
                 # Create a temporary entry describing the C method
                 # as an ordinary function.
-                binding = Binding(
-                    name = entry.name,
-                    cname = '%s->%s' % (type.vtabptr_cname, entry.cname))
-                ubcm_entry = Symtab.Entry(binding, type = entry.type)
+                ubcm_entry = Symtab.Entry(name = entry.name, cname = '%s->%s' % (type.vtabptr_cname, entry.cname), type = entry.type)
                 ubcm_entry.is_cfunction = 1
                 ubcm_entry.func_cname = entry.func_cname
                 ubcm_entry.is_unbound_cmethod = 1

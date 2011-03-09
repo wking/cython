@@ -1,4 +1,3 @@
-from Binding import Binding
 from Cython.Compiler.Visitor import VisitorTransform, ScopeTrackingTransform, TreeVisitor
 from Nodes import StatListNode, SingleAssignmentNode, CFuncDefNode
 from ExprNodes import DictNode, DictItemNode, NameNode, UnicodeNode, NoneNode, \
@@ -39,10 +38,8 @@ class AutoTestDictTransform(ScopeTrackingTransform):
         self.tests = []
         self.testspos = node.pos
 
-        binding = Binding(
-            name = EncodedString(u'__test__'), c_visibility = 'public')
         test_dict_entry = node.scope.declare_var(
-            binding, type = py_object_type, pos = pos)
+            name = EncodedString(u'__test__'), c_visibility = 'public', type = py_object_type, pos = pos)
         create_test_dict_assignment = SingleAssignmentNode(pos,
             lhs=NameNode(pos, name=EncodedString(u'__test__'),
                          entry=test_dict_entry),

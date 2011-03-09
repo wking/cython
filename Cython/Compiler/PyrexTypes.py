@@ -2,7 +2,6 @@
 #   Pyrex - Types
 #
 
-from Binding import Binding
 from Code import UtilityCode
 import StringEncoding
 import Naming
@@ -686,11 +685,10 @@ class CNumericType(CType):
                     c_visibility='extern')
             scope.parent_type = self
             scope.directives = {}
-            binding = Binding(name = 'conjugate', cname = ' ')
             func_type = CFuncType(
                 self, [CFuncTypeArg("self", self, None)], nogil=True)
             entry = scope.declare_cfunction(
-                binding, type = func_type, defining = 1)
+                name = 'conjugate', cname = ' ', type = func_type, defining = 1)
         return True
 
 
@@ -1190,16 +1188,12 @@ class CComplexType(CNumericType):
                     c_visibility='extern')
             scope.parent_type = self
             scope.directives = {}
-            binding = Binding(name = 'real', cname = 'real')
-            scope.declare_var(binding, type = self.real_type, is_cdef=True)
-            binding = Binding(name = 'imag', cname = 'imag')
-            scope.declare_var(binding, type = self.real_type, is_cdef=True)
-            binding = Binding(
-                name = 'conjugate', cname = '__Pyx_c_conj%s' % self.funcsuffix)
+            scope.declare_var(name = 'real', cname = 'real', type = self.real_type, is_cdef=True)
+            scope.declare_var(name = 'imag', cname = 'imag', type = self.real_type, is_cdef=True)
             func_type = CFuncType(
                 self, [CFuncTypeArg('self', self, None)], nogil=True)
             entry = scope.declare_cfunction(
-                binding, type = func_type, defining = 1)
+                name = 'conjugate', cname = '__Pyx_c_conj%s' % self.funcsuffix, type = func_type, defining = 1)
 
         return True
 

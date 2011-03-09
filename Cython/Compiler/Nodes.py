@@ -15,7 +15,6 @@ cython.declare(sys=object, os=object, time=object, copy=object,
 import sys, os, time, copy
 
 import Builtin
-from Binding import Binding
 from Errors import error, warning, InternalError
 import Naming
 import PyrexTypes
@@ -563,18 +562,15 @@ class CFuncDeclaratorNode(CDeclaratorNode):
         if self.optional_arg_count:
             scope = StructOrUnionScope()
             arg_count_member = '%sn' % Naming.pyrex_prefix
-            binding = Binding(name = arg_count_member)
             scope.declare_var(
-                binding, type = PyrexTypes.c_int_type, pos = self.pos)
+                name = arg_count_member, type = PyrexTypes.c_int_type, pos = self.pos)
             for arg in func_type_args[len(func_type_args)-self.optional_arg_count:]:
-                binding = Binding(name = arg.name)
                 scope.declare_var(
-                    binding, type = arg.type, allow_pyobject = 1,
+                    name = arg.name, type = arg.type, allow_pyobject = 1,
                     pos = arg.pos)
             struct_cname = env.mangle(Naming.opt_arg_prefix, self.base.name)
-            binding = Binding(name = struct_cname, cname = struct_cname)
             self.op_args_struct = env.global_scope().declare_struct_or_union(
-                binding, kind = 'struct', scope = scope, pos = self.pos)
+                name = struct_cname, cname = struct_cname, kind = 'struct', scope = scope, pos = self.pos)
             self.op_args_struct.defined_in_pxd = 1
             self.op_args_struct.used = 1
 
@@ -916,12 +912,12 @@ class CComplexBaseTypeNode(CBaseTypeNode):
 class CVarDefNode(StatNode):
     #  C variable definition or forward/extern function declaration.
     #
-    #  c_visibility  (same as Binding.c_visibility)
-    #  visibility    (same as Binding.visibility)
+    #  c_visibility  (same as Entry.c_visibility)
+    #  visibility    (same as Entry.visibility)
     #  base_type     CBaseTypeNode
     #  declarators   [CDeclaratorNode]
     #  in_pxd        boolean
-    #  api           (same as Binding.api)
+    #  api           (same as Entry.api)
 
     #  decorators    [cython.locals(...)] or None
     #  directive_locals { string : NameNode } locals defined by cython.locals(...)
@@ -959,11 +955,9 @@ class CVarDefNode(StatNode):
             if name == '':
                 error(declarator.pos, "Missing name in declaration.")
                 return
-            binding = Binding(name=name, cname=cname)
-            binding.pull(self)
             if type.is_cfunction:
                 entry = dest_scope.declare_cfunction(
-                    binding, type = type, in_pxd = self.in_pxd,
+                    name = name, cname = cname, c_visibility = self.c_visibility, visibility = self.visibility, overridable = self.overridable, api = self.api, type = type, in_pxd = self.in_pxd,
                     pos = declarator.pos)
                 if entry is not None:
                     entry.directive_locals = self.directive_locals
@@ -974,17 +968,17 @@ class CVarDefNode(StatNode):
                     error(self.pos,
                         "Only 'extern' C variable declaration allowed in .pxd file")
                 entry = dest_scope.declare_var(
-                    binding, type = type, is_cdef = 1, pos = declarator.pos)
+                    name = name, cname = cname, c_visibility = self.c_visibility, visibility = self.visibility, overridable = self.overridable, api = self.api, type = type, is_cdef = 1, pos = declarator.pos)
                 entry.needs_property = need_property
 
 
 class CStructOrUnionDefNode(StatNode):
-    #  name          (same as Binding.name)
-    #  cname         (same as Binding.cname)
+    #  name          (same as Entry.name)
+    #  cname         (same as Entry.cname)
     #  kind          "struct" or "union"
     #  typedef_flag  boolean
-    #  c_visibility  (same as Binding.c_visibility)
-    #  visibility    (same as Binding.visibility)
+    #  c_visibility  (same as Entry.c_visibility)
+    #  visibility    (same as Entry.visibility)
     #  in_pxd        boolean
     #  attributes    [CVarDefNode] or None
     #  entry         Entry
@@ -998,10 +992,8 @@ class CStructOrUnionDefNode(StatNode):
             error(self.pos, "Cannot declare extern struct as 'packed'")
         if self.attributes is not None:
             scope = StructOrUnionScope(self.name)
-        binding = Binding()
-        binding.pull(self)
         self.entry = env.declare_struct_or_union(
-            binding, kind = self.kind, scope = scope,
+            name = self.name, cname = self.cname, c_visibility = self.c_visibility, visibility = self.visibility, overridable = self.overridable, kind = self.kind, scope = scope,
             typedef_flag = self.typedef_flag, packed = self.packed,
             pos = self.pos)
         if self.attributes is not None:
@@ -1025,12 +1017,8 @@ class CStructOrUnionDefNode(StatNode):
                 if need_typedef_indirection:
                     # C can't handle typedef structs that refer to themselves.
                     struct_entry = self.entry
-                    binding = Binding()
-                    binding.pull(self)
-                    binding.c_visibility = 'ignore'
-                    binding.visibility = 'private'
                     self.entry = env.declare_typedef(
-                        binding, base_type = struct_entry.type, pos = self.pos)
+                        name = self.name, cname = self.cname, c_visibility = 'ignore', visibility = 'private', overridable = self.overridable, base_type = struct_entry.type, pos = self.pos)
                     struct_entry.type.typedef_flag = False
                     # FIXME: this might be considered a hack ;-)
                     struct_entry.cname = struct_entry.type.cname = \
@@ -1044,10 +1032,10 @@ class CStructOrUnionDefNode(StatNode):
 
 
 class CppClassNode(CStructOrUnionDefNode):
-    #  name          (same as Binding.name)
-    #  cname         (same as Binding.cname)
-    #  c_visibility  'extern' (same as Binding.c_visibility)
-    #  visibility    (same as Binding.visibility)
+    #  name          (same as Entry.name)
+    #  cname         (same as Entry.cname)
+    #  c_visibility  'extern' (same as Entry.c_visibility)
+    #  visibility    (same as Entry.visibility)
     #  in_pxd        boolean
     #  attributes    [CVarDefNode] or None
     #  entry         Entry
@@ -1071,10 +1059,8 @@ class CppClassNode(CStructOrUnionDefNode):
             template_types = None
         else:
             template_types = [PyrexTypes.TemplatePlaceholderType(template_name) for template_name in self.templates]
-        binding = Binding()
-        binding.pull(self)
         self.entry = env.declare_cpp_class(
-            binding, scope = scope, base_classes = base_class_types,
+            name = self.name, cname = self.cname, c_visibility = self.c_visibility, visibility = self.visibility, scope = scope, base_classes = base_class_types,
             templates = template_types, pos = self.pos)
         if self.entry is None:
             return
@@ -1086,22 +1072,20 @@ class CppClassNode(CStructOrUnionDefNode):
                 attr.analyse_declarations(scope)
 
 class CEnumDefNode(StatNode):
-    #  name           (same as Binding.name)
-    #  cname          (same as Binding.cname)
+    #  name           (same as Entry.name)
+    #  cname          (same as Entry.cname)
     #  items          [CEnumDefItemNode]
     #  typedef_flag   boolean
-    #  c_visibility   (same as Binding.c_visibility)
-    #  visibility     (same as Binding.visibility)
+    #  c_visibility   (same as Entry.c_visibility)
+    #  visibility     (same as Entry.visibility)
     #  in_pxd         boolean
     #  entry          Entry
 
     child_attrs = ["items"]
 
     def analyse_declarations(self, env):
-        binding = Binding()
-        binding.pull(self)
         self.entry = env.declare_enum(
-            binding, typedef_flag = self.typedef_flag, pos = self.pos)
+            name = self.name, cname = self.cname, c_visibility = self.c_visibility, visibility = self.visibility, typedef_flag = self.typedef_flag, pos = self.pos)
         if self.items is not None:
             if self.in_pxd and not env.in_cinclude:
                 self.entry.defined_in_pxd = 1
@@ -1132,8 +1116,8 @@ class CEnumDefNode(StatNode):
 
 
 class CEnumDefItemNode(StatNode):
-    #  name           (same as Binding.name)
-    #  cname          (same as Binding.cname)
+    #  name           (same as Entry.name)
+    #  cname          (same as Entry.cname)
     #  value    ExprNode or None
 
     child_attrs = ["value"]
@@ -1144,10 +1128,8 @@ class CEnumDefItemNode(StatNode):
             if not self.value.type.is_int:
                 self.value = self.value.coerce_to(PyrexTypes.c_int_type, env)
                 self.value.analyse_const_expression(env)
-        binding = Binding()
-        binding.pull(self)
         entry = env.declare_const(
-            binding, type = enum_entry.type,
+            name = self.name, cname = self.cname, c_visibility = self.c_visibility, visibility = self.visibility, type = enum_entry.type,
             value = self.value, pos = self.pos)
         enum_entry.enum_values.append(entry)
 
@@ -1163,12 +1145,8 @@ class CTypeDefNode(StatNode):
     def analyse_declarations(self, env):
         base = self.base_type.analyse(env)
         name_declarator, type = self.declarator.analyse(base, env)
-        binding = Binding()
-        binding.pull(self)
-        binding.name = name_declarator.name
-        binding.cname = name_declarator.cname
         entry = env.declare_typedef(
-            binding, base_type = type, pos = self.pos)
+            name = name_declarator.name, cname = name_declarator.cname, c_visibility = self.c_visibility, visibility = self.visibility, base_type = type, pos = self.pos)
         if self.in_pxd and not env.in_cinclude:
             entry.defined_in_pxd = 1
 
@@ -1545,8 +1523,7 @@ class FuncDefNode(StatNode, BlockNode):
         elif not arg.type.is_complete() and not arg.type.is_array:
             error(arg.pos,
                 "Argument type '%s' is incomplete" % arg.type)
-        binding = Binding(name = arg.name)
-        return env.declare_arg(binding, type = arg.type, pos = arg.pos)
+        return env.declare_arg(name = arg.name, type = arg.type, pos = arg.pos)
 
     def generate_arg_type_test(self, arg, code):
         # Generate type test for one argument.
@@ -1627,18 +1604,18 @@ class CFuncDefNode(FuncDefNode):
     #  C function definition.
     #
     #  modifiers     ['inline']
-    #  c_visibility  (same as Binding.c_visibility)
-    #  visibility    (same as Binding.visibility)
+    #  c_visibility  (same as Entry.c_visibility)
+    #  visibility    (same as Entry.visibility)
     #  base_type     CBaseTypeNode
     #  declarator    CDeclaratorNode
     #  body          StatListNode
-    #  api           (same as Binding.api)
+    #  api           (same as Entry.api)
     #  decorators    [DecoratorNode]        list of decorators
     #
     #  with_gil      boolean    Acquire GIL around body
     #  type          CFuncType
     #  py_func       wrapper for calling from Python
-    #  overridable   (same as Binding.overridable)
+    #  overridable   (same as Entry.overridable)
     #  inline_in_pxd whether this is an inline function in a pxd file
 
     child_attrs = ["base_type", "declarator", "body", "py_func"]
@@ -1674,12 +1651,8 @@ class CFuncDefNode(FuncDefNode):
             formal_arg.cname = type_arg.cname
             if type_arg.type.is_buffer and 'inline' in self.modifiers:
                 warning(formal_arg.pos, "Buffer unpacking not optimized away.", 1)
-        binding = Binding()
-        binding.pull(self)
-        binding.name = name_declarator.name
-        binding.cname = name_declarator.cname
         self.entry = env.declare_cfunction(
-            binding, type = type, defining = self.body is not None,
+            name = name_declarator.name, cname = name_declarator.cname, c_visibility = self.c_visibility, visibility = self.visibility, overridable = self.overridable, api = self.api, type = type, defining = self.body is not None,
             modifiers = self.modifiers, pos = self.pos)
         self.entry.inline_func_in_pxd = self.inline_in_pxd
         self.return_type = type.return_type
@@ -2185,11 +2158,12 @@ class DefNode(FuncDefNode):
         entry = env.lookup_here(name)
         if entry and entry.type.is_cfunction and not self.is_wrapper:
             warning(self.pos, "Overriding cdef method with def method.", 5)
-        binding = Binding(name = name)
         if env.is_c_class_scope:
-            binding.c_visibility = 'extern'
+            c_visibility = 'extern'
+        else:
+            c_visibility = 'private'
         entry = env.declare_pyfunction(
-            binding, allow_redefine=not self.is_wrapper, pos = self.pos)
+            name = name, c_visibility = c_visibility, allow_redefine=not self.is_wrapper, pos = self.pos)
         self.entry = entry
         prefix = env.next_id(env.scope_prefix)
 
@@ -2214,8 +2188,7 @@ class DefNode(FuncDefNode):
         prefix = env.scope_prefix
         func_cname = \
             Naming.lambda_func_prefix + u'funcdef' + prefix + self.lambda_name
-        binding = Binding(cname = func_cname)
-        entry = env.declare_lambda_function(binding, pos = self.pos)
+        entry = env.declare_lambda_function(cname = func_cname, pos = self.pos)
         entry.pymethdef_cname = \
             Naming.lambda_func_prefix + u'methdef' + prefix + self.lambda_name
         entry.qualified_name = env.qualify_name(self.lambda_name)
@@ -2230,9 +2203,8 @@ class DefNode(FuncDefNode):
                 env.control_flow.set_state((), (arg.name, 'source'), 'arg')
                 env.control_flow.set_state((), (arg.name, 'initialized'), True)
             if arg.needs_conversion:
-                binding = Binding(name = arg.name)
                 arg.entry = env.declare_var(
-                    binding, type = arg.type, pos = arg.pos)
+                    name = arg.name, type = arg.type, pos = arg.pos)
                 if arg.type.is_pyobject:
                     arg.entry.init = "0"
                 arg.entry.init_to_none = 0
@@ -2253,8 +2225,7 @@ class DefNode(FuncDefNode):
                 type = PyrexTypes.unspecified_type
             else:
                 type = py_object_type
-            binding = Binding(name = arg.name)
-            entry = env.declare_var(binding, type = type, pos = arg.pos)
+            entry = env.declare_var(name = arg.name, type = type, pos = arg.pos)
             entry.used = 1
             entry.init = "0"
             entry.init_to_none = 0
@@ -3167,10 +3138,10 @@ class PyClassDefNode(ClassDefNode):
 class CClassDefNode(ClassDefNode):
     #  An extension type definition.
     #
-    #  c_visibility       (same as Binding.c_visibility)
-    #  visibility         (same as Binding.visibility)
+    #  c_visibility       (same as Entry.c_visibility)
+    #  visibility         (same as Entry.visibility)
     #  typedef_flag       boolean
-    #  api                (same as Binding.api)
+    #  api                (same as Entry.api)
     #  module_name        string or None    For import of extern type objects
     #  class_name         string            Unqualified name of class
     #  as_name            string or None    Name to declare as in this scope
@@ -3274,11 +3245,8 @@ class CClassDefNode(ClassDefNode):
                 env.qualified_name[:8] != 'cpython.'): # allow overloaded names for cimporting from cpython
                 warning(self.pos, "%s already a builtin Cython type" % self.class_name, 1)
 
-        binding = Binding()
-        binding.pull(self)
-        binding.name = self.class_name
         self.entry = home_scope.declare_c_class(
-            binding, 
+            name = self.class_name, c_visibility = self.c_visibility, visibility = self.visibility, api = self.api,
             objstruct_cname = self.objstruct_name,
             base_type = self.base_type,
             defining = has_body and self.in_pxd,
@@ -3339,8 +3307,7 @@ class PropertyNode(StatNode):
     child_attrs = ["body"]
 
     def analyse_declarations(self, env):
-        binding = Binding(name = self.name)
-        entry = env.declare_property(binding, self.doc, pos = self.pos)
+        entry = env.declare_property(name = self.name, doc = self.doc, pos = self.pos)
         if entry:
             entry.scope.directives = env.directives
             self.body.analyse_declarations(entry.scope)
@@ -3396,9 +3363,8 @@ class ExprStatNode(StatNode):
                     if type is None:
                         error(type_node.pos, "Unknown type")
                     else:
-                        binding = Binding(name = var.value)
                         env.declare_var(
-                            binding, type = type, is_cdef = True,
+                            name = var.value, type = type, is_cdef = True,
                             pos = var.pos)
                 self.__class__ = PassStatNode
 
@@ -3486,9 +3452,8 @@ class SingleAssignmentNode(AssignmentNode):
                             error(lhs.pos, "Invalid declaration")
                             return
                         for var, pos in vars:
-                            binding = Binding(name = var)
                             env.declare_var(
-                                binding, type = type, is_cdef = True,
+                                name = var, type = type, is_cdef = True,
                                 pos = pos)
                         if len(args) == 2:
                             # we have a value
@@ -3499,11 +3464,8 @@ class SingleAssignmentNode(AssignmentNode):
                         self.declaration_only = True
                         if not isinstance(lhs, ExprNodes.NameNode):
                             error(lhs.pos, "Invalid declaration.")
-                        binding = Binding(
-                            name = lhs.name, c_visibility='private',
-                            visibility='public')
                         env.declare_typedef(
-                            binding, base_type = type, pos = self.pos)
+                            name = lhs.name, c_visibility = 'private', visibility = 'public', base_type = type, pos = self.pos)
 
                 elif func_name in ['struct', 'union']:
                     self.declaration_only = True
@@ -3523,13 +3485,11 @@ class SingleAssignmentNode(AssignmentNode):
                         error(self.lhs.pos, "Invalid declaration.")
                     name = self.lhs.name
                     scope = StructOrUnionScope(name)
-                    binding = Binding(name = name)
                     env.declare_struct_or_union(
-                        binding, kind = func_name, scope = scope,
+                        name = name, kind = func_name, scope = scope,
                         pos = self.rhs.pos)
                     for member, type, pos in members:
-                        binding = Binding(name = member)
-                        scope.declare_var(binding, type = type, pos = pos)
+                        scope.declare_var(name = member, type = type, pos = pos)
 
         if self.declaration_only:
             return
@@ -5288,13 +5248,11 @@ class FromCImportStatNode(StatNode):
                         entry.redeclared(pos)
                 else:
                     if kind == 'struct' or kind == 'union':
-                        binding = Binding(name = name)
                         entry = module_scope.declare_struct_or_union(
-                            binding, kind = kind, scope = None, pos = pos)
+                            name = name, kind = kind, scope = None, pos = pos)
                     elif kind == 'class':
-                        binding = Binding(name = name)
                         entry = module_scope.declare_c_class(
-                            binding, module_name = self.module_name, pos = pos)
+                            name = name, module_name = self.module_name, pos = pos)
                     else:
                         submodule_scope = env.context.find_module(name, relative_to = module_scope, pos = self.pos)
                         if submodule_scope.parent_module is module_scope:

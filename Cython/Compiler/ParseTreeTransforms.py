@@ -6,7 +6,6 @@ cython.declare(PyrexTypes=object, Naming=object, ExprNodes=object, Nodes=object,
                TemplateTransform=object, EncodedString=object,
                error=object, warning=object, copy=object)
 
-from Binding import Binding
 import PyrexTypes
 import Naming
 import ExprNodes
@@ -1091,8 +1090,7 @@ if VALUE is not None:
             if not lenv.lookup_here(var):   # don't redeclare args
                 type = type_node.analyse_as_type(lenv)
                 if type:
-                    binding = Binding(name = var)
-                    lenv.declare_var(binding, type = type, pos = type_node.pos)
+                    lenv.declare_var(name = var, type = type, pos = type_node.pos)
                 else:
                     error(type_node.pos, "Not a type")
         node.body.analyse_declarations(lenv)
@@ -1487,9 +1485,8 @@ class CreateClosureClasses(CythonTransform):
 
         as_name = '%s_%s' % (target_module_scope.next_id(Naming.closure_class_prefix), node.entry.cname)
 
-        binding = Binding(name = as_name)
         entry = target_module_scope.declare_c_class(
-            binding, defining = True, implementing = True, pos = node.pos)
+            name = as_name, defining = True, implementing = True, pos = node.pos)
         func_scope.scope_class = entry
         class_scope = entry.type.scope
         class_scope.is_internal = True
@@ -1497,16 +1494,13 @@ class CreateClosureClasses(CythonTransform):
 
         if from_closure:
             assert cscope.is_closure_scope
-            binding = Binding(
-                name=Naming.outer_scope_cname, cname=Naming.outer_scope_cname)
             class_scope.declare_var(
-                binding, type=cscope.scope_class.type, is_cdef=True,
+                name=Naming.outer_scope_cname, cname=Naming.outer_scope_cname, type=cscope.scope_class.type, is_cdef=True,
                 pos=node.pos)
             node.needs_outer_scope = True
         for name, entry in in_closure:
-            binding = Binding(name=entry.name, cname=entry.cname)
             class_scope.declare_var(
-                binding, type=entry.type, is_cdef=True, pos=entry.pos)
+                name=entry.name, cname=entry.cname, type=entry.type, is_cdef=True, pos=entry.pos)
         node.needs_closure = True
         # Do it here because other classes are already checked
         target_module_scope.check_c_class(func_scope.scope_class)

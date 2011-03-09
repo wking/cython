@@ -5,7 +5,6 @@ cython.declare(UtilityCode=object, EncodedString=object, BytesLiteral=object,
                Nodes=object, ExprNodes=object, PyrexTypes=object, Builtin=object,
                UtilNodes=object, Naming=object)
 
-from Binding import Binding
 import Nodes
 import ExprNodes
 import PyrexTypes
@@ -74,10 +73,8 @@ class IterationTransform(Visitor.VisitorTransform):
 
     PyDict_Next_name = EncodedString("PyDict_Next")
 
-    binding = Binding(
-        name = PyDict_Next_name, cname = PyDict_Next_name)
     PyDict_Next_entry = Symtab.Entry(
-        binding, type = PyDict_Next_func_type)
+        name = PyDict_Next_name, cname = PyDict_Next_name, type = PyDict_Next_func_type)
 
     visit_Node = Visitor.VisitorTransform.recurse_to_children
 

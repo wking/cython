@@ -12,7 +12,6 @@ import re
 import sys
 
 from Cython.Compiler.Scanning import PyrexScanner, FileSourceDescriptor
-from Binding import Binding
 import Nodes
 import ExprNodes
 import StringEncoding
@@ -24,12 +23,57 @@ import Future
 import Options
 
 
-class Ctx(Binding):
-    #  Parsing context
+class Ctx(object):
+    """ Parsing context
+
+    * cname (string): Generated symbol name (or source name, is the
+      symbol is external.
+    * namespace (string): C++ namespace of the source (`None` for C
+      objects, set if the symbol is external)
+    * cdef_flag (boolean): Symbol (data) has a C definition.
+    * c_visibility ('private'|'public'|'extern'|'ignore'):
+
+      * private: Symbol is not accessible to external C code
+      * public: Symbol is accessible to external C code
+      * extern: Symbol is defined elsewhere (otherwise a local
+        definition is created).
+      * ignore: ? something about symbol re-definition?
+
+    * const (boolean): Symbol data is readonly.
+    * api (boolean): Add to generated header file
+
+
+
+    * name (string): Name to which the object is bound (if the object
+      is visible)
+    * visibility ('private'|'public'|'readonly'):
+
+      * private: Object is not exposed to Python code.
+      * public: Python can read/write to the object's data.
+      * readonly: Python can read (but nut write) the object's data.
+
+    * overridable (boolean): Python references can be overridden in
+      Python (if the object is visible).  This is only supported in
+      class methods.
+    """
     level = 'other'
     typedef_flag = 0
     nogil = 0
     templates = None
+
+    cname = None
+    namespace = None
+    cdef_flag = 0
+    c_visibility = 'private'
+    const = 0
+    api = 0
+
+    name = None
+    visibility = 'public'
+    overridable = 0
+
+    def __init__(self, **kwargs):
+        self.__dict__.update(kwargs)
 
     def __call__(self, **kwds):
         ctx = Ctx()
