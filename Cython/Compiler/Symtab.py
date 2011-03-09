@@ -350,7 +350,7 @@ class Scope(object):
 #            else:
 #                entries[binding.name] = entry
             if not shadow:
-                 entries[binding.name] = entry
+                entries[binding.name] = entry
         entry.scope = self
         return entry
 
@@ -1286,8 +1286,7 @@ class ModuleScope(Scope):
                 print("...entry %s %s" % (entry.name, entry))
                 print("......type = ",  entry.type)
                 print("......binding.c_visibility = ", entry.c_visibility)
-                print("......binding.visibility = ",
-                      entry.python.binding.visibility)
+                print("......binding.visibility = ", entry.visibility)
             self.check_c_class(entry)
 
     def check_c_functions(self):
@@ -1610,9 +1609,7 @@ class CClassScope(ClassScope):
                 if binding.name == "__weakref__":
                     error(pos, "Special attribute __weakref__ cannot be exposed to Python")
                 if not type.is_pyobject:
-                    #print 'XXX', binding.name, binding.c_visibility == 'extern', binding.c_visibility, binding.visibility, type.create_to_py_utility_code(self), type.__class__  ####### XXXXX BUG! (cimportfrom_T248)
                     if not type.create_to_py_utility_code(self):
-                        #print 'XXX', binding.name, binding.c_visibility == 'extern', binding.c_visibility, binding.visibility  ####### XXXXX BUG! (cimportfrom_T248)
                         error(pos,
                               "C attribute of type '%s' cannot be accessed from Python" % type)
             return entry
@@ -1730,7 +1727,6 @@ class CClassScope(ClassScope):
             entry = self.declare(binding, py_object_type, pos = pos)
         entry.is_property = 1
         entry.doc = doc
-        # WTK: TODO: adjust PropertyScope attributes
         entry.scope = PropertyScope(binding.name,
             outer_scope = self.global_scope(), parent_scope = self)
         entry.scope.parent_type = self.parent_type

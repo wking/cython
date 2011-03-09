@@ -940,7 +940,8 @@ class CVarDefNode(StatNode):
         # If the field is an external typedef, we cannot be sure about the type,
         # so do conversion ourself rather than rely on the CPython mechanism (through
         # a property; made in AnalyseDeclarationsTransform).
-        if dest_scope.is_c_class_scope and self.c_visibility == 'public':
+        if (dest_scope.is_c_class_scope
+            and self.visibility in ('public', 'readonly')):
             need_property = True
         else:
             need_property = False
