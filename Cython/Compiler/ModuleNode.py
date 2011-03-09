@@ -98,8 +98,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
     def generate_h_code(self, env, options, result):
         def h_entries(entries, pxd = 0):
             return [entry for entry in entries
-                    if entry.c_visibility == 'public'
-                    or pxd and entry.defined_in_pxd]
+                if entry.c_visibility == 'public' or pxd and entry.defined_in_pxd]
         h_types = h_entries(env.type_entries)
         h_vars = h_entries(env.var_entries)
         h_funcs = h_entries(env.cfunc_entries)

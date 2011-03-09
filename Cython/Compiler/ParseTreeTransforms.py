@@ -1485,8 +1485,8 @@ class CreateClosureClasses(CythonTransform):
 
         as_name = '%s_%s' % (target_module_scope.next_id(Naming.closure_class_prefix), node.entry.cname)
 
-        entry = target_module_scope.declare_c_class(
-            name = as_name, defining = True, implementing = True, pos = node.pos)
+        entry = target_module_scope.declare_c_class(name = as_name,
+            pos = node.pos, defining = True, implementing = True)
         func_scope.scope_class = entry
         class_scope = entry.type.scope
         class_scope.is_internal = True
@@ -1494,13 +1494,18 @@ class CreateClosureClasses(CythonTransform):
 
         if from_closure:
             assert cscope.is_closure_scope
-            class_scope.declare_var(
-                name=Naming.outer_scope_cname, cname=Naming.outer_scope_cname, type=cscope.scope_class.type, is_cdef=True,
-                pos=node.pos)
+            class_scope.declare_var(pos=node.pos,
+                                    name=Naming.outer_scope_cname,
+                                    cname=Naming.outer_scope_cname,
+                                    type=cscope.scope_class.type,
+                                    is_cdef=True)
             node.needs_outer_scope = True
         for name, entry in in_closure:
-            class_scope.declare_var(
-                name=entry.name, cname=entry.cname, type=entry.type, is_cdef=True, pos=entry.pos)
+            class_scope.declare_var(pos=entry.pos,
+                                    name=entry.name,
+                                    cname=entry.cname,
+                                    type=entry.type,
+                                    is_cdef=True)
         node.needs_closure = True
         # Do it here because other classes are already checked
         target_module_scope.check_c_class(func_scope.scope_class)
@@ -1737,6 +1742,7 @@ class DebugTransform(CythonTransform):
             self.nested_funcdefs.append(node)
             return node
 
+        # node.entry.visibility = 'extern'
         if node.py_func is None:
             pf_cname = ''
         else:

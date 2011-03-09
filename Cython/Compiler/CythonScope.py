@@ -10,8 +10,11 @@ class CythonScope(ModuleScope):
         ModuleScope.__init__(self, u'cython', None, context)
         self.pxd_file_loaded = True
 
-        self.shape_entry = self.declare_cfunction(
-            name = 'shape', cname = '<error>', type = shape_func_type, defining = 1)
+        self.shape_entry = self.declare_cfunction('shape',
+                                                  type=shape_func_type,
+                                                  pos=None,
+                                                  defining = 1,
+                                                  cname='<error>')
 
     def lookup_type(self, name):
         # This function should go away when types are all first-level objects.
@@ -29,13 +32,19 @@ def create_utility_scope(context):
     utility_scope = ModuleScope(u'utility', None, context)
 
     # These are used to optimize isinstance in FinalOptimizePhase
-    type_object = utility_scope.declare_typedef(
-        name = 'PyTypeObject', cname = 'PyTypeObject', base_type = c_void_type, pos = None)
+    type_object = utility_scope.declare_typedef('PyTypeObject',
+                                                base_type = c_void_type,
+                                                pos = None,
+                                                cname = 'PyTypeObject')
     type_object.is_void = True
 
     func_type = CFuncType(
         c_bint_type, [CFuncTypeArg("o", py_object_type, None),
                       CFuncTypeArg("t", c_ptr_type(type_object), None)])
-    utility_scope.declare_cfunction(name = 'PyObject_TypeCheck', cname = 'PyObject_TypeCheck', type = func_type, defining = 1)
+    utility_scope.declare_cfunction(
+                'PyObject_TypeCheck',
+                type = func_type,
+                defining = 1,
+                cname = 'PyObject_TypeCheck')
 
     return utility_scope

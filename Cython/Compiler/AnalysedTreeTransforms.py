@@ -39,7 +39,9 @@ class AutoTestDictTransform(ScopeTrackingTransform):
         self.testspos = node.pos
 
         test_dict_entry = node.scope.declare_var(
-            name = EncodedString(u'__test__'), c_visibility = 'public', type = py_object_type, pos = pos)
+            name = EncodedString(u'__test__'),
+            c_visibility = 'public',
+            type = py_object_type, pos = pos)
         create_test_dict_assignment = SingleAssignmentNode(pos,
             lhs=NameNode(pos, name=EncodedString(u'__test__'),
                          entry=test_dict_entry),

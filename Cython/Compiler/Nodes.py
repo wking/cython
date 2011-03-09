@@ -569,8 +569,12 @@ class CFuncDeclaratorNode(CDeclaratorNode):
                     name = arg.name, type = arg.type, allow_pyobject = 1,
                     pos = arg.pos)
             struct_cname = env.mangle(Naming.opt_arg_prefix, self.base.name)
-            self.op_args_struct = env.global_scope().declare_struct_or_union(
-                name = struct_cname, cname = struct_cname, kind = 'struct', scope = scope, pos = self.pos)
+            self.op_args_struct = env.global_scope().declare_struct_or_union(name = struct_cname,
+                                        kind = 'struct',
+                                        scope = scope,
+                                        typedef_flag = 0,
+                                        pos = self.pos,
+                                        cname = struct_cname)
             self.op_args_struct.defined_in_pxd = 1
             self.op_args_struct.used = 1
 
@@ -936,7 +940,8 @@ class CVarDefNode(StatNode):
         # If the field is an external typedef, we cannot be sure about the type,
         # so do conversion ourself rather than rely on the CPython mechanism (through
         # a property; made in AnalyseDeclarationsTransform).
-        if dest_scope.is_c_class_scope and self.c_visibility == 'public':
+        if (dest_scope.is_c_class_scope
+            and self.visibility in ('public', 'readonly')):
             need_property = True
         else:
             need_property = False
@@ -1651,9 +1656,15 @@ class CFuncDefNode(FuncDefNode):
             formal_arg.cname = type_arg.cname
             if type_arg.type.is_buffer and 'inline' in self.modifiers:
                 warning(formal_arg.pos, "Buffer unpacking not optimized away.", 1)
+        name = name_declarator.name
+        cname = name_declarator.cname
         self.entry = env.declare_cfunction(
-            name = name_declarator.name, cname = name_declarator.cname, c_visibility = self.c_visibility, visibility = self.visibility, overridable = self.overridable, api = self.api, type = type, defining = self.body is not None,
-            modifiers = self.modifiers, pos = self.pos)
+            name = name, type = type, pos = self.pos,
+            cname = cname, visibility = self.visibility,
+            c_visibility = self.c_visibility,
+            overridable = self.overridable,
+            defining = self.body is not None,
+            api = self.api, modifiers = self.modifiers)
         self.entry.inline_func_in_pxd = self.inline_in_pxd
         self.return_type = type.return_type
         if self.return_type.is_array and self.c_visibility != 'extern':
@@ -1680,7 +1691,7 @@ class CFuncDefNode(FuncDefNode):
             self.py_func.analyse_declarations(env)
             self.entry.as_variable = self.py_func.entry
             # Reset scope entry the above cfunction
-            env.entries[self.entry.name] = self.entry
+            env.entries[name] = self.entry
             if not env.is_module_scope or Options.lookup_module_cpdef:
                 self.override = OverrideCheckNode(self.pos, py_func = self.py_func)
                 self.body = StatListNode(self.pos, stats=[self.override, self.body])
@@ -3246,17 +3257,20 @@ class CClassDefNode(ClassDefNode):
                 warning(self.pos, "%s already a builtin Cython type" % self.class_name, 1)
 
         self.entry = home_scope.declare_c_class(
-            name = self.class_name, c_visibility = self.c_visibility, visibility = self.visibility, api = self.api,
-            objstruct_cname = self.objstruct_name,
-            base_type = self.base_type,
+            name = self.class_name,
+            pos = self.pos,
             defining = has_body and self.in_pxd,
             implementing = has_body and not self.in_pxd,
             module_name = self.module_name,
+            base_type = self.base_type,
+            objstruct_cname = self.objstruct_name,
             typeobj_cname = self.typeobj_name,
+            c_visibility = self.c_visibility,
+            visibility = self.visibility,
             typedef_flag = self.typedef_flag,
+            api = self.api,
             buffer_defaults = buffer_defaults,
-            shadow = self.shadow,
-            pos = self.pos)
+            shadow = self.shadow)
         if self.shadow:
             home_scope.lookup(self.class_name).as_variable = self.entry
         if home_scope is not env and self.c_visibility == 'extern':
