@@ -469,8 +469,7 @@ class Scope(object):
         if templates is not None:
             for T in templates:
                 binding = Binding(
-                    name=T.name, cname=T.name,
-                    extern=True, c_visibility='public')
+                    name=T.name, cname=T.name, c_visibility='extern')
                 template_entry = entry.type.scope.declare(binding, type=T)
                 template_entry.is_type = 1
 
