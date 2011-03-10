@@ -26,8 +26,6 @@ import Options
 class Ctx(object):
     """ Parsing context
 
-    * cname (string): Generated symbol name (or source name, is the
-      symbol is external.
     * namespace (string): C++ namespace of the source (`None` for C
       objects, set if the symbol is external)
     * cdef_flag (boolean): Symbol (data) has a C definition.
@@ -39,13 +37,9 @@ class Ctx(object):
         definition is created).
       * ignore: ? something about symbol re-definition?
 
-    * const (boolean): Symbol data is readonly.
     * api (boolean): Add to generated header file
 
 
-
-    * name (string): Name to which the object is bound (if the object
-      is visible)
     * visibility ('private'|'public'|'readonly'):
 
       * private: Object is not exposed to Python code.
@@ -61,14 +55,11 @@ class Ctx(object):
     nogil = 0
     templates = None
 
-    cname = None
     namespace = None
     cdef_flag = 0
     c_visibility = 'private'
-    const = 0
     api = 0
 
-    name = None
     visibility = 'public'
     overridable = 0
 

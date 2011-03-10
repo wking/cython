@@ -58,8 +58,10 @@ class BufferAux(object):
 class Entry(object):
     # A symbol table entry in a Scope or ModuleNamespace.
     #
-    # name             string     Python name of entity
-    # cname            string     C name of entity
+    # name             string     Name to which the object is bound (if the object
+    #                             is visible from Python)
+    # cname            string     Generated C symbol name (or source name, if the
+    #                             symbol is external.
     # type             PyrexType  Type of entity
     # doc              string     Doc string
     # init             string     Initial value
