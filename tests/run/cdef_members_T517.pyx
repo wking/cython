@@ -76,6 +76,20 @@ AttributeError: ...
 >>> b.c2 = A() #doctest: +ELLIPSIS
 Traceback (most recent call last):
 AttributeError: ...
+
+>>> bar = Bar()
+
+>>> bar.foo0 #doctest: +ELLIPSIS
+Traceback (most recent call last):
+AttributeError: ...
+
+>>> type(bar.foo1)
+<type 'dict'>
+>>> bar.foo1
+{'i': 0}
+>>> bar.foo1['i'] = 2
+>>> bar.foo1
+{'i': 0}
 """
 
 import sys
@@ -138,3 +152,13 @@ cdef class B:
     def __cinit__(self):
         self.b0 = self.b1 = self.b2 = []
         self.c0 = self.c1 = self.c2 = A()
+
+
+ctypedef struct Foo:
+    int i
+
+
+cdef class Bar:
+    cdef          Foo foo0
+    cdef readonly Foo foo1
+    pass
