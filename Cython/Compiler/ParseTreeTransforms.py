@@ -1238,7 +1238,9 @@ if VALUE is not None:
         elif entry.visibility == 'readonly':
             template = self.basic_property_ro
         else:
-            raise NotImplementedError('private python methods')
+            error(entry.pos,
+                  "python methods may not have '%s' Python visibility" %
+                  entry.visibility)
         property = template.substitute({
                 u"ATTR": ExprNodes.AttributeNode(pos=entry.pos,
                                                  obj=ExprNodes.NameNode(pos=entry.pos, name="self"),
