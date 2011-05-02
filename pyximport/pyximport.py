@@ -205,7 +205,10 @@ class PyxImporter(object):
         try:
             fp, pathname, (ext,mode,ty) = imp.find_module(fullname,package_path)
             if fp: fp.close()  # Python should offer a Default-Loader to avoid this double find/open!
-            if ty!=imp.C_EXTENSION: # only when an extension, check if we have a .pyx next!
+            if pathname.endswith(self.extension):
+                return PyxLoader(fullname, pathname,
+                                 pyxbuild_dir=self.pyxbuild_dir)
+            if ty != imp.C_EXTENSION: # only when an extension, check if we have a .pyx next!
                 return None
 
             # find .pyx fast, when .so/.pyd exist --inplace
@@ -258,7 +261,8 @@ class PyImporter(PyxImporter):
         self.super = super(PyImporter, self)
         self.super.__init__(extension='.py', pyxbuild_dir=pyxbuild_dir)
         self.uncompilable_modules = {}
-        self.blocked_modules = ['Cython']
+        self.blocked_modules = ['Cython', 'distutils.extension',
+                                'distutils.sysconfig']
 
     def find_module(self, fullname, package_path=None):
         if fullname in sys.modules:
@@ -269,7 +273,7 @@ class PyImporter(PyxImporter):
             # prevent infinite recursion
             return None
         if DEBUG_IMPORT:
-            print("trying import of module", fullname)
+            print("trying import of module '%s'" % fullname)
         if fullname in self.uncompilable_modules:
             path, last_modified = self.uncompilable_modules[fullname]
             try:
@@ -285,13 +289,13 @@ class PyImporter(PyxImporter):
         try:
             importer = self.super.find_module(fullname, package_path)
             if importer is not None:
-                if DEBUG_IMPORT:
-                    print("importer found")
                 try:
                     if importer.init_path:
                         path = importer.init_path
                     else:
                         path = importer.path
+                    if DEBUG_IMPORT:
+                        print("importer found path %s" % path)
                     build_module(fullname, path,
                                  pyxbuild_dir=self.pyxbuild_dir)
                 except Exception, e:

@@ -1,3 +1,7 @@
+# mode: run
+# tag: lambda
+# ticket: 195
+
 __doc__ = u"""
 #>>> py_identity = lambda x:x
 #>>> py_identity(1) == cy_identity(1)

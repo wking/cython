@@ -1,6 +1,7 @@
+# mode: error
 
 u'\uXYZ'
 
 _ERRORS = '''
-2:2: Invalid unicode escape '\u'
+3:2: Invalid unicode escape '\u'
 '''

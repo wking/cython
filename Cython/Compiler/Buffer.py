@@ -748,7 +748,8 @@ typedef struct {
   int new_count, enc_count;
   int is_complex;
   char enc_type;
-  char packmode;
+  char new_packmode;
+  char enc_packmode;
 } __Pyx_BufFmt_Context;
 
 static void __Pyx_BufFmt_Init(__Pyx_BufFmt_Context* ctx,
@@ -763,7 +764,8 @@ static void __Pyx_BufFmt_Init(__Pyx_BufFmt_Context* ctx,
   ctx->head->field = &ctx->root;
   ctx->fmt_offset = 0;
   ctx->head->parent_offset = 0;
-  ctx->packmode = '@';
+  ctx->new_packmode = '@';
+  ctx->enc_packmode = '@';
   ctx->new_count = 1;
   ctx->enc_count = 0;
   ctx->enc_type = 0;
@@ -937,12 +939,12 @@ static int __Pyx_BufFmt_ProcessTypeChunk(__Pyx_BufFmt_Context* ctx) {
     __Pyx_StructField* field = ctx->head->field;
     __Pyx_TypeInfo* type = field->type;
 
-    if (ctx->packmode == '@' || ctx->packmode == '^') {
+    if (ctx->enc_packmode == '@' || ctx->enc_packmode == '^') {
       size = __Pyx_BufFmt_TypeCharToNativeSize(ctx->enc_type, ctx->is_complex);
     } else {
       size = __Pyx_BufFmt_TypeCharToStandardSize(ctx->enc_type, ctx->is_complex);
     }
-    if (ctx->packmode == '@') {
+    if (ctx->enc_packmode == '@') {
       int align_at = __Pyx_BufFmt_TypeCharToAlignment(ctx->enc_type, ctx->is_complex);
       int align_mod_offset;
       if (align_at == 0) return -1;
@@ -968,7 +970,7 @@ static int __Pyx_BufFmt_ProcessTypeChunk(__Pyx_BufFmt_Context* ctx) {
     if (ctx->fmt_offset != offset) {
       PyErr_Format(PyExc_ValueError,
                    "Buffer dtype mismatch; next field is at offset %"PY_FORMAT_SIZE_T"d "
-                   "but %"PY_FORMAT_SIZE_T"d expected", ctx->fmt_offset, offset);
+                   "but %"PY_FORMAT_SIZE_T"d expected", (Py_ssize_t)ctx->fmt_offset, (Py_ssize_t)offset);
       return -1;
     }
 
@@ -1009,14 +1011,6 @@ static int __Pyx_BufFmt_ProcessTypeChunk(__Pyx_BufFmt_Context* ctx) {
   return 0;
 }
 
-static int __Pyx_BufFmt_FirstPack(__Pyx_BufFmt_Context* ctx) {
-  if (ctx->enc_type != 0 || ctx->packmode != '@') {
-    PyErr_SetString(PyExc_ValueError, "Buffer packing mode currently only allowed at beginning of format string (this is a defect)");
-    return -1;
-  }
-  return 0;
-}
-
 static const char* __Pyx_BufFmt_CheckString(__Pyx_BufFmt_Context* ctx, const char* ts) {
   int got_Z = 0;
   while (1) {
@@ -1042,8 +1036,7 @@ static const char* __Pyx_BufFmt_CheckString(__Pyx_BufFmt_Context* ctx, const cha
           PyErr_SetString(PyExc_ValueError, "Little-endian buffer not supported on big-endian compiler");
           return NULL;
         }
-        if (__Pyx_BufFmt_FirstPack(ctx) == -1) return NULL;
-        ctx->packmode = '=';
+        ctx->new_packmode = '=';
         ++ts;
         break;
       case '>':
@@ -1052,15 +1045,13 @@ static const char* __Pyx_BufFmt_CheckString(__Pyx_BufFmt_Context* ctx, const cha
           PyErr_SetString(PyExc_ValueError, "Big-endian buffer not supported on little-endian compiler");
           return NULL;
         }
-        if (__Pyx_BufFmt_FirstPack(ctx) == -1) return NULL;
-        ctx->packmode = '=';
+        ctx->new_packmode = '=';
         ++ts;
         break;
       case '=':
       case '@':
       case '^':
-        if (__Pyx_BufFmt_FirstPack(ctx) == -1) return NULL;
-        ctx->packmode = *ts++;
+        ctx->new_packmode = *ts++;
         break;
       case 'T': /* substruct */
         {
@@ -1091,6 +1082,7 @@ static const char* __Pyx_BufFmt_CheckString(__Pyx_BufFmt_Context* ctx, const cha
         ctx->new_count = 1;
         ctx->enc_count = 0;
         ctx->enc_type = 0;
+        ctx->enc_packmode = ctx->new_packmode;
         ++ts;
         break;
       case 'Z':
@@ -1104,13 +1096,15 @@ static const char* __Pyx_BufFmt_CheckString(__Pyx_BufFmt_Context* ctx, const cha
       case 'l': case 'L': case 'q': case 'Q':
       case 'f': case 'd': case 'g':
       case 'O':
-        if (ctx->enc_type == *ts && got_Z == ctx->is_complex) {
+        if (ctx->enc_type == *ts && got_Z == ctx->is_complex &&
+            ctx->enc_packmode == ctx->new_packmode) {
           /* Continue pooling same type */
           ctx->enc_count += ctx->new_count;
         } else {
           /* New type */
           if (__Pyx_BufFmt_ProcessTypeChunk(ctx) == -1) return NULL;
           ctx->enc_count = ctx->new_count;
+          ctx->enc_packmode = ctx->new_packmode;
           ctx->enc_type = *ts;
           ctx->is_complex = got_Z;
         }
@@ -1118,7 +1112,7 @@ static const char* __Pyx_BufFmt_CheckString(__Pyx_BufFmt_Context* ctx, const cha
         ctx->new_count = 1;
         got_Z = 0;
         break;
-        case ':':
+      case ':':
         ++ts;
         while(*ts != ':') ++ts;
         ++ts;
@@ -1169,7 +1163,7 @@ static CYTHON_INLINE int __Pyx_GetBufferAndValidate(Py_buffer* buf, PyObject* ob
       "Item size of buffer (%"PY_FORMAT_SIZE_T"d byte%s) does not match size of '%s' (%"PY_FORMAT_SIZE_T"d byte%s)",
       buf->itemsize, (buf->itemsize > 1) ? "s" : "",
       dtype->name,
-      dtype->size, (dtype->size > 1) ? "s" : "");
+      (Py_ssize_t)dtype->size, (dtype->size > 1) ? "s" : "");
     goto fail;
   }
   if (buf->suboffsets == NULL) buf->suboffsets = __Pyx_minusones;

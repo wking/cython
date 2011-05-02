@@ -1,3 +1,4 @@
+# mode: error
 
 cimport cython
 
@@ -9,5 +10,5 @@ cdef class SubType(FinalClass):
     pass
 
 _ERRORS = """
-8:0: Base class 'FinalClass' of type 'SubType' is final
+9:0: Base class 'FinalClass' of type 'SubType' is final
 """

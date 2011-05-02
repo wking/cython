@@ -1,3 +1,5 @@
+# mode: error
+
 cdef struct Foo
 
 ctypedef struct Foo:
@@ -12,6 +14,6 @@ cdef Foo f
 cdef Blarg b
 
 _ERRORS = u"""
-3:0: 'Foo' previously declared using 'cdef'
-9:0: 'Blarg' previously declared using 'ctypedef'
+5:0: 'Foo' previously declared using 'cdef'
+11:0: 'Blarg' previously declared using 'ctypedef'
 """

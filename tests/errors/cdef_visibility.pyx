@@ -1,3 +1,5 @@
+# mode: error
+
 # TODO: a way to keep going after parsing errors?
 
 cdef private int priv_global_variable
@@ -34,5 +36,5 @@ cpdef class cp_global_class:
 
 
 _ERRORS = u"""
-3:17: Syntax error in C variable declaration
+5:17: Syntax error in C variable declaration
 """

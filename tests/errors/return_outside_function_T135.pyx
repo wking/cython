@@ -1,3 +1,5 @@
+# ticket: 135
+# mode: error
 
 def _runtime_True():
     return True
@@ -29,13 +31,13 @@ else:
 
 
 _ERRORS = u'''
- 5:0: Return not inside a function body
- 8:4: Return not inside a function body
-11:4: Return not inside a function body
-13:5: Return not inside a function body
-16:5: Return not inside a function body
-20:4: Return not inside a function body
-23:4: Return not inside a function body
-26:4: Return not inside a function body
+7:0: Return not inside a function body
+10:4: Return not inside a function body
+13:4: Return not inside a function body
+15:5: Return not inside a function body
+18:5: Return not inside a function body
+22:4: Return not inside a function body
+25:4: Return not inside a function body
 28:4: Return not inside a function body
+30:4: Return not inside a function body
 '''

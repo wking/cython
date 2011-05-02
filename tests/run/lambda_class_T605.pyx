@@ -1,3 +1,7 @@
+# mode: run
+# tag: lambda
+# ticket: 605
+
 cdef int cdef_CONST = 123
 CONST = 456
 

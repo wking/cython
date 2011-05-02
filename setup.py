@@ -18,6 +18,7 @@ def add_command_class(name, cls):
 from distutils.command.sdist import sdist as sdist_orig
 class sdist(sdist_orig):
     def run(self):
+        self.force_manifest = 1
         if (sys.platform != "win32" and 
             os.path.isdir('.git')):
             assert os.system("git show-ref -s HEAD > .gitrev") == 0
@@ -248,7 +249,11 @@ except ValueError:
 
 try:
     sys.argv.remove("--no-cython-compile")
+    compile_cython_itself = False
 except ValueError:
+    compile_cython_itself = True
+
+if compile_cython_itself:
     compile_cython_modules(cython_profile, cython_compile_more, cython_with_refnanny)
 
 setup_args.update(setuptools_extra_args)

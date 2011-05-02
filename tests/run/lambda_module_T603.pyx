@@ -1,4 +1,9 @@
+# mode: run
+# tag: lambda
+# ticket: 603
+
 # Module scope lambda functions
+
 __doc__ = """
 >>> pow2(16)
 256

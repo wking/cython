@@ -1,3 +1,5 @@
+# mode: error
+
 def f():
 	cdef char *str1
 	cdef float flt1, flt2, flt3
@@ -5,6 +7,6 @@ def f():
 	flt1 = flt2 ** str1 # error
 
 _ERRORS = u"""
-4:13: Invalid operand types for '**' (char *; float)
-5:13: Invalid operand types for '**' (float; char *)
+6:13: Invalid operand types for '**' (char *; float)
+7:13: Invalid operand types for '**' (float; char *)
 """

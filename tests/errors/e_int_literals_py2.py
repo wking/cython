@@ -1,3 +1,4 @@
+# mode: error
 # cython: language_level=2
 
 def int_literals():
@@ -9,7 +10,7 @@ def int_literals():
 
 
 _ERRORS = """
-6:8: illegal integer literal syntax in Python source file
 7:8: illegal integer literal syntax in Python source file
 8:8: illegal integer literal syntax in Python source file
+9:8: illegal integer literal syntax in Python source file
 """

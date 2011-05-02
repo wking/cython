@@ -1,3 +1,5 @@
+# mode: compile
+
 cdef class A:
     cdef public int i
     cdef readonly int j

@@ -11,11 +11,12 @@ import Naming
 import ExprNodes
 import Nodes
 import Options
+import Builtin
 
 from Cython.Compiler.Visitor import VisitorTransform, TreeVisitor
 from Cython.Compiler.Visitor import CythonTransform, EnvTransform, ScopeTrackingTransform
 from Cython.Compiler.ModuleNode import ModuleNode
-from Cython.Compiler.UtilNodes import LetNode, LetRefNode
+from Cython.Compiler.UtilNodes import LetNode, LetRefNode, ResultRefNode
 from Cython.Compiler.TreeFragment import TreeFragment, TemplateTransform
 from Cython.Compiler.StringEncoding import EncodedString
 from Cython.Compiler.Errors import error, warning, CompileError, InternalError
@@ -63,7 +64,6 @@ class SkipDeclarations(object):
 
     def visit_CStructOrUnionDefNode(self, node):
         return node
-
 
 class NormalizeTree(CythonTransform):
     """
@@ -183,6 +183,7 @@ class PostParse(ScopeTrackingTransform):
 
     def visit_ModuleNode(self, node):
         self.lambda_counter = 1
+        self.genexpr_counter = 1
         return super(PostParse, self).visit_ModuleNode(node)
 
     def visit_LambdaNode(self, node):
@@ -190,14 +191,33 @@ class PostParse(ScopeTrackingTransform):
         lambda_id = self.lambda_counter
         self.lambda_counter += 1
         node.lambda_name = EncodedString(u'lambda%d' % lambda_id)
-
-        body = Nodes.ReturnStatNode(
-            node.result_expr.pos, value = node.result_expr)
+        collector = YieldNodeCollector()
+        collector.visitchildren(node.result_expr)
+        if collector.yields or isinstance(node.result_expr, ExprNodes.YieldExprNode):
+            body = Nodes.ExprStatNode(
+                node.result_expr.pos, expr=node.result_expr)
+        else:
+            body = Nodes.ReturnStatNode(
+                node.result_expr.pos, value=node.result_expr)
         node.def_node = Nodes.DefNode(
             node.pos, name=node.name, lambda_name=node.lambda_name,
             args=node.args, star_arg=node.star_arg,
             starstar_arg=node.starstar_arg,
-            body=body)
+            body=body, doc=None)
+        self.visitchildren(node)
+        return node
+
+    def visit_GeneratorExpressionNode(self, node):
+        # unpack a generator expression into the corresponding DefNode
+        genexpr_id = self.genexpr_counter
+        self.genexpr_counter += 1
+        node.genexpr_name = EncodedString(u'genexpr%d' % genexpr_id)
+
+        node.def_node = Nodes.DefNode(node.pos, name=node.name,
+                                      doc=None,
+                                      args=[], star_arg=None,
+                                      starstar_arg=None,
+                                      body=node.loop)
         self.visitchildren(node)
         return node
 
@@ -299,6 +319,20 @@ class PostParse(ScopeTrackingTransform):
                 assign_node = LetNode(temp_ref, assign_node)
 
         return assign_node
+
+    def _flatten_sequence(self, seq, result):
+        for arg in seq.args:
+            if arg.is_sequence_constructor:
+                self._flatten_sequence(arg, result)
+            else:
+                result.append(arg)
+        return result
+
+    def visit_DelStatNode(self, node):
+        self.visitchildren(node)
+        node.args = self._flatten_sequence(node, [])
+        return node
+
 
 def eliminate_rhs_duplicates(expr_list_list, ref_node_sequence):
     """Replace rhs items by LetRefNodes if they appear more than once.
@@ -462,7 +496,7 @@ def map_starred_assignment(lhs_targets, starred_assignments, lhs_args, rhs_args)
 
     # right side of the starred target
     for i, (targets, expr) in enumerate(zip(lhs_targets[-lhs_remaining:],
-                                            lhs_args[-lhs_remaining:])):
+                                            lhs_args[starred + 1:])):
         targets.append(expr)
 
     # the starred target itself, must be assigned a (potentially empty) list
@@ -585,7 +619,7 @@ class InterpretCompilerDirectives(CythonTransform, SkipDeclarations):
         super(InterpretCompilerDirectives, self).__init__(context)
         self.compilation_directive_defaults = {}
         for key, value in compilation_directive_defaults.items():
-            self.compilation_directive_defaults[unicode(key)] = value
+            self.compilation_directive_defaults[unicode(key)] = copy.deepcopy(value)
         self.cython_module_names = cython.set()
         self.directive_names = {}
 
@@ -605,8 +639,8 @@ class InterpretCompilerDirectives(CythonTransform, SkipDeclarations):
                 self.wrong_scope_error(node.pos, key, 'module')
                 del node.directive_comments[key]
 
-        directives = copy.copy(Options.directive_defaults)
-        directives.update(self.compilation_directive_defaults)
+        directives = copy.deepcopy(Options.directive_defaults)
+        directives.update(copy.deepcopy(self.compilation_directive_defaults))
         directives.update(node.directive_comments)
         self.directives = directives
         node.directives = directives
@@ -864,81 +898,55 @@ class InterpretCompilerDirectives(CythonTransform, SkipDeclarations):
         return self.visit_Node(node)
 
 class WithTransform(CythonTransform, SkipDeclarations):
-
-    # EXCINFO is manually set to a variable that contains
-    # the exc_info() tuple that can be generated by the enclosing except
-    # statement.
-    template_without_target = TreeFragment(u"""
-        MGR = EXPR
-        EXIT = MGR.__exit__
-        MGR.__enter__()
-        EXC = True
-        try:
-            try:
-                EXCINFO = None
-                BODY
-            except:
-                EXC = False
-                if not EXIT(*EXCINFO):
-                    raise
-        finally:
-            if EXC:
-                EXIT(None, None, None)
-    """, temps=[u'MGR', u'EXC', u"EXIT"],
-    pipeline=[NormalizeTree(None)])
-
-    template_with_target = TreeFragment(u"""
-        MGR = EXPR
-        EXIT = MGR.__exit__
-        VALUE = MGR.__enter__()
-        EXC = True
-        try:
-            try:
-                EXCINFO = None
-                TARGET = VALUE
-                BODY
-            except:
-                EXC = False
-                if not EXIT(*EXCINFO):
-                    raise
-        finally:
-            if EXC:
-                EXIT(None, None, None)
-            MGR = EXIT = VALUE = EXC = None
-
-    """, temps=[u'MGR', u'EXC', u"EXIT", u"VALUE"],
-    pipeline=[NormalizeTree(None)])
-
     def visit_WithStatNode(self, node):
-        # TODO: Cleanup badly needed
-        TemplateTransform.temp_name_counter += 1
-        handle = "__tmpvar_%d" % TemplateTransform.temp_name_counter
+        self.visitchildren(node, 'body')
+        pos = node.pos
+        body, target, manager = node.body, node.target, node.manager
+        node.target_temp = ExprNodes.TempNode(pos, type=PyrexTypes.py_object_type)
+        if target is not None:
+            node.has_target = True
+            body = Nodes.StatListNode(
+                pos, stats = [
+                    Nodes.WithTargetAssignmentStatNode(
+                        pos, lhs = target, rhs = node.target_temp),
+                    body
+                    ])
+            node.target = None
 
-        self.visitchildren(node, ['body'])
-        excinfo_temp = ExprNodes.NameNode(node.pos, name=handle)#TempHandle(Builtin.tuple_type)
-        if node.target is not None:
-            result = self.template_with_target.substitute({
-                u'EXPR' : node.manager,
-                u'BODY' : node.body,
-                u'TARGET' : node.target,
-                u'EXCINFO' : excinfo_temp
-                }, pos=node.pos)
-        else:
-            result = self.template_without_target.substitute({
-                u'EXPR' : node.manager,
-                u'BODY' : node.body,
-                u'EXCINFO' : excinfo_temp
-                }, pos=node.pos)
+        excinfo_target = ResultRefNode(
+            pos=pos, type=Builtin.tuple_type, may_hold_none=False)
+        except_clause = Nodes.ExceptClauseNode(
+            pos, body = Nodes.IfStatNode(
+                pos, if_clauses = [
+                    Nodes.IfClauseNode(
+                        pos, condition = ExprNodes.NotNode(
+                            pos, operand = ExprNodes.WithExitCallNode(
+                                pos, with_stat = node,
+                                args = excinfo_target)),
+                        body = Nodes.ReraiseStatNode(pos),
+                        ),
+                    ],
+                else_clause = None),
+            pattern = None,
+            target = None,
+            excinfo_target = excinfo_target,
+            )
 
-        # Set except excinfo target to EXCINFO
-        try_except = result.stats[-1].body.stats[-1]
-        try_except.except_clauses[0].excinfo_target = ExprNodes.NameNode(node.pos, name=handle)
-#            excinfo_temp.ref(node.pos))
-
-#        result.stats[-1].body.stats[-1] = TempsBlockNode(
-#            node.pos, temps=[excinfo_temp], body=try_except)
-
-        return result
+        node.body = Nodes.TryFinallyStatNode(
+            pos, body = Nodes.TryExceptStatNode(
+                pos, body = body,
+                except_clauses = [except_clause],
+                else_clause = None,
+                ),
+            finally_clause = Nodes.ExprStatNode(
+                pos, expr = ExprNodes.WithExitCallNode(
+                    pos, with_stat = node,
+                    args = ExprNodes.TupleNode(
+                        pos, args = [ExprNodes.NoneNode(pos) for _ in range(3)]
+                        ))),
+            handle_error_case = False,
+            )
+        return node
 
     def visit_ExprNode(self, node):
         # With statements are never inside expressions.
@@ -1178,7 +1186,7 @@ if VALUE is not None:
             arg = copy.deepcopy(arg_template)
             arg.declarator.name = entry.name
             init_method.args.append(arg)
-            
+
         # setters/getters
         for entry, attr in zip(var_entries, attributes):
             # TODO: branch on visibility
@@ -1191,7 +1199,7 @@ if VALUE is not None:
                 }, pos = entry.pos).stats[0]
             property.name = entry.name
             wrapper_class.body.stats.append(property)
-            
+
         wrapper_class.analyse_declarations(self.env_stack[-1])
         return self.visit_CClassDefNode(wrapper_class)
 
@@ -1219,7 +1227,8 @@ if VALUE is not None:
     def visit_CNameDeclaratorNode(self, node):
         if node.name in self.seen_vars_stack[-1]:
             entry = self.env_stack[-1].lookup(node.name)
-            if entry is None or entry.c_visibility != 'extern':
+            if (entry is None or entry.c_visibility != 'extern'
+                and not entry.scope.is_c_class_scope):
                 warning(node.pos, "cdef variable '%s' declared after it is used" % node.name, 2)
         self.visitchildren(node)
         return node
@@ -1368,7 +1377,8 @@ class AlignFunctionDefinitions(CythonTransform):
                 return self.visit_CClassDefNode(node.as_cclass(), pxd_def)
             else:
                 error(node.pos, "'%s' redeclared" % node.name)
-                error(pxd_def.pos, "previous declaration here")
+                if pxd_def.pos:
+                    error(pxd_def.pos, "previous declaration here")
                 return None
         else:
             return node
@@ -1386,18 +1396,56 @@ class AlignFunctionDefinitions(CythonTransform):
 
     def visit_DefNode(self, node):
         pxd_def = self.scope.lookup(node.name)
-        if pxd_def:
+        if pxd_def and (not pxd_def.scope or not pxd_def.scope.is_builtin_scope):
             if not pxd_def.is_cfunction:
                 error(node.pos, "'%s' redeclared" % node.name)
-                error(pxd_def.pos, "previous declaration here")
+                if pxd_def.pos:
+                    error(pxd_def.pos, "previous declaration here")
                 return None
             node = node.as_cfunction(pxd_def)
-        elif self.scope.is_module_scope and self.directives['auto_cpdef']:
+        elif (self.scope.is_module_scope and self.directives['auto_cpdef']
+              and node.is_cdef_func_compatible()):
             node = node.as_cfunction(scope=self.scope)
-        # Enable this when internal def functions are allowed.
+        # Enable this when nested cdef functions are allowed.
         # self.visitchildren(node)
         return node
 
+
+class YieldNodeCollector(TreeVisitor):
+
+    def __init__(self):
+        super(YieldNodeCollector, self).__init__()
+        self.yields = []
+        self.returns = []
+        self.has_return_value = False
+
+    def visit_Node(self, node):
+        return self.visitchildren(node)
+
+    def visit_YieldExprNode(self, node):
+        if self.has_return_value:
+            error(node.pos, "'yield' outside function")
+        self.yields.append(node)
+        self.visitchildren(node)
+
+    def visit_ReturnStatNode(self, node):
+        if node.value:
+            self.has_return_value = True
+            if self.yields:
+                error(node.pos, "'return' with argument inside generator")
+        self.returns.append(node)
+
+    def visit_ClassDefNode(self, node):
+        pass
+
+    def visit_FuncDefNode(self, node):
+        pass
+
+    def visit_LambdaNode(self, node):
+        pass
+
+    def visit_GeneratorExpressionNode(self, node):
+        pass
 
 class MarkClosureVisitor(CythonTransform):
 
@@ -1411,6 +1459,27 @@ class MarkClosureVisitor(CythonTransform):
         self.visitchildren(node)
         node.needs_closure = self.needs_closure
         self.needs_closure = True
+
+        collector = YieldNodeCollector()
+        collector.visitchildren(node)
+
+        if collector.yields:
+            for i, yield_expr in enumerate(collector.yields):
+                yield_expr.label_num = i + 1
+
+            gbody = Nodes.GeneratorBodyDefNode(pos=node.pos,
+                                               name=node.name,
+                                               body=node.body)
+            generator = Nodes.GeneratorDefNode(pos=node.pos,
+                                               name=node.name,
+                                               args=node.args,
+                                               star_arg=node.star_arg,
+                                               starstar_arg=node.starstar_arg,
+                                               doc=node.doc,
+                                               decorators=node.decorators,
+                                               gbody=gbody,
+                                               lambda_name=node.lambda_name)
+            return generator
         return node
 
     def visit_CFuncDefNode(self, node):
@@ -1431,7 +1500,6 @@ class MarkClosureVisitor(CythonTransform):
         self.needs_closure = True
         return node
 
-
 class CreateClosureClasses(CythonTransform):
     # Output closure classes in module scope for all functions
     # that really need it.
@@ -1440,24 +1508,88 @@ class CreateClosureClasses(CythonTransform):
         super(CreateClosureClasses, self).__init__(context)
         self.path = []
         self.in_lambda = False
+        self.generator_class = None
 
     def visit_ModuleNode(self, node):
         self.module_scope = node.scope
         self.visitchildren(node)
         return node
 
-    def get_scope_use(self, node):
+    def create_generator_class(self, target_module_scope, pos):
+        if self.generator_class:
+            return self.generator_class
+        # XXX: make generator class creation cleaner
+        entry = target_module_scope.declare_c_class(name='__pyx_Generator',
+                    objstruct_cname='__pyx_Generator_object',
+                    typeobj_cname='__pyx_Generator_type',
+                    pos=pos, defining=True, implementing=True)
+        klass = entry.type.scope
+        klass.is_internal = True
+        klass.directives = {'final': True}
+
+        body_type = PyrexTypes.create_typedef_type('generator_body',
+                                                   PyrexTypes.c_void_ptr_type,
+                                                   '__pyx_generator_body_t')
+        klass.declare_var(pos=pos, name='body', cname='body',
+                          visibility='private', type=body_type, is_cdef=True)
+        klass.declare_var(pos=pos, name='is_running', cname='is_running', type=PyrexTypes.c_int_type,
+                          is_cdef=True)
+        klass.declare_var(pos=pos, name='resume_label', cname='resume_label', type=PyrexTypes.c_int_type,
+                          is_cdef=True)
+        klass.declare_var(pos=pos, name='exc_type', cname='exc_type',
+                          type=PyrexTypes.py_object_type, is_cdef=True)
+        klass.declare_var(pos=pos, name='exc_value', cname='exc_value',
+                          type=PyrexTypes.py_object_type, is_cdef=True)
+        klass.declare_var(pos=pos, name='exc_traceback', cname='exc_traceback',
+                          type=PyrexTypes.py_object_type, is_cdef=True)
+
+        import TypeSlots
+        e = klass.declare_pyfunction(name='send', pos=pos)
+        e.func_cname = '__Pyx_Generator_Send'
+        e.signature = TypeSlots.binaryfunc
+
+        e = klass.declare_pyfunction(name='close', pos=pos)
+        e.func_cname = '__Pyx_Generator_Close'
+        e.signature = TypeSlots.unaryfunc
+
+        e = klass.declare_pyfunction(name='throw', pos=pos)
+        e.func_cname = '__Pyx_Generator_Throw'
+        e.signature = TypeSlots.pyfunction_signature
+
+        e = klass.declare_var(
+            name='__iter__', type=PyrexTypes.py_object_type,
+            c_visibility='public', pos=pos)
+        e.func_cname = 'PyObject_SelfIter'
+
+        e = klass.declare_var(
+            name='__next__', type=PyrexTypes.py_object_type,
+            c_visibility='public', pos=pos)
+        e.func_cname = '__Pyx_Generator_Next'
+
+        self.generator_class = entry.type
+        return self.generator_class
+
+    def find_entries_used_in_closures(self, node):
         from_closure = []
         in_closure = []
         for name, entry in node.local_scope.entries.items():
             if entry.from_closure:
                 from_closure.append((name, entry))
-            elif entry.in_closure and not entry.from_closure:
+            elif entry.in_closure:
                 in_closure.append((name, entry))
         return from_closure, in_closure
 
     def create_class_from_scope(self, node, target_module_scope, inner_node=None):
-        from_closure, in_closure = self.get_scope_use(node)
+        # skip generator body
+        if node.is_generator_body:
+            return
+        # move local variables into closure
+        if node.is_generator:
+            for entry in node.local_scope.entries.values():
+                if not entry.from_closure:
+                    entry.in_closure = True
+
+        from_closure, in_closure = self.find_entries_used_in_closures(node)
         in_closure.sort()
 
         # Now from the begining
@@ -1476,8 +1608,11 @@ class CreateClosureClasses(CythonTransform):
                 inner_node = node.assmt.rhs
             inner_node.needs_self_code = False
             node.needs_outer_scope = False
-        # Simple cases
-        if not in_closure and not from_closure:
+
+        base_type = None
+        if node.is_generator:
+            base_type = self.create_generator_class(target_module_scope, node.pos)
+        elif not in_closure and not from_closure:
             return
         elif not in_closure:
             func_scope.is_passthrough = True
@@ -1487,8 +1622,10 @@ class CreateClosureClasses(CythonTransform):
 
         as_name = '%s_%s' % (target_module_scope.next_id(Naming.closure_class_prefix), node.entry.cname)
 
-        entry = target_module_scope.declare_c_class(name = as_name,
-            pos = node.pos, defining = True, implementing = True)
+        entry = target_module_scope.declare_c_class(
+            name=as_name, pos=node.pos, defining=True,
+            implementing=True, base_type=base_type)
+
         func_scope.scope_class = entry
         class_scope = entry.type.scope
         class_scope.is_internal = True
@@ -1503,11 +1640,13 @@ class CreateClosureClasses(CythonTransform):
                                     is_cdef=True)
             node.needs_outer_scope = True
         for name, entry in in_closure:
-            class_scope.declare_var(pos=entry.pos,
+            closure_entry = class_scope.declare_var(pos=entry.pos,
                                     name=entry.name,
                                     cname=entry.cname,
                                     type=entry.type,
                                     is_cdef=True)
+            if entry.is_declared_generic:
+                closure_entry.is_declared_generic = 1
         node.needs_closure = True
         # Do it here because other classes are already checked
         target_module_scope.check_c_class(func_scope.scope_class)
@@ -1600,25 +1739,40 @@ class TransformBuiltinMethods(EnvTransform):
                 error(node.pos, u"'%s' not a valid cython attribute or is being used incorrectly" % attribute)
         return node
 
-    def visit_SimpleCallNode(self, node):
+    def _inject_locals(self, node, func_name):
+        # locals()/dir() builtins
+        lenv = self.current_env()
+        entry = lenv.lookup_here(func_name)
+        if entry:
+            # not the builtin
+            return node
+        pos = node.pos
+        if func_name == 'locals':
+            if len(node.args) > 0:
+                error(self.pos, "Builtin 'locals()' called with wrong number of args, expected 0, got %d"
+                      % len(node.args))
+                return node
+            items = [ ExprNodes.DictItemNode(pos,
+                                             key=ExprNodes.StringNode(pos, value=var),
+                                             value=ExprNodes.NameNode(pos, name=var))
+                      for var in lenv.entries ]
+            return ExprNodes.DictNode(pos, key_value_pairs=items)
+        else:
+            if len(node.args) > 1:
+                error(self.pos, "Builtin 'dir()' called with wrong number of args, expected 0-1, got %d"
+                      % len(node.args))
+                return node
+            elif len(node.args) == 1:
+                # optimised in Builtin.py
+                return node
+            items = [ ExprNodes.StringNode(pos, value=var) for var in lenv.entries ]
+            return ExprNodes.ListNode(pos, args=items)
 
-        # locals builtin
+    def visit_SimpleCallNode(self, node):
         if isinstance(node.function, ExprNodes.NameNode):
-            if node.function.name == 'locals':
-                lenv = self.current_env()
-                entry = lenv.lookup_here('locals')
-                if entry:
-                    # not the builtin 'locals'
-                    return node
-                if len(node.args) > 0:
-                    error(self.pos, "Builtin 'locals()' called with wrong number of args, expected 0, got %d" % len(node.args))
-                    return node
-                pos = node.pos
-                items = [ ExprNodes.DictItemNode(pos,
-                                                 key=ExprNodes.StringNode(pos, value=var),
-                                                 value=ExprNodes.NameNode(pos, name=var))
-                          for var in lenv.entries ]
-                return ExprNodes.DictNode(pos, key_value_pairs=items)
+            func_name = node.function.name
+            if func_name in ('dir', 'locals'):
+                return self._inject_locals(node, func_name)
 
         # cython.foo
         function = node.function.as_cython_attribute()

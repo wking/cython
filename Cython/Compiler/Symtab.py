@@ -216,6 +216,7 @@ class Scope(object):
     # cname_to_entry    {string : Entry}   Temp cname to entry mapping
     # int_to_entry      {int : Entry}      Temp cname to entry mapping
     # return_type       PyrexType or None  Return type of function owning scope
+    # is_builtin_scope  boolean            Is the builtin scope of Python/Cython
     # is_py_class_scope boolean            Is a Python class scope
     # is_c_class_scope  boolean            Is an extension type scope
     # is_closure_scope  boolean            Is a closure scope
@@ -233,6 +234,7 @@ class Scope(object):
     #                                      analysis, contains directive values.
     # is_internal       boolean            Is only used internally (simpler setup)
 
+    is_builtin_scope = 0
     is_py_class_scope = 0
     is_c_class_scope = 0
     is_closure_scope = 0
@@ -368,7 +370,7 @@ class Scope(object):
     def declare_const(self, name, cname = None, namespace = None, c_visibility = 'private', visibility = 'public', overridable = 0, api = 0, type = None, value = None, pos = None):
         # Add an entry for a named constant.
         if not cname:
-            if self.in_cinclude or c_visibility == 'public':
+            if self.in_cinclude or c_visibility == 'public' or api:
                 cname = name
             else:
                 cname = self.mangle(Naming.enum_prefix, name)
@@ -384,6 +386,7 @@ class Scope(object):
             cname = name
         entry = self.declare(name = name, cname = cname, namespace = namespace, c_visibility = c_visibility, visibility = visibility, overridable = overridable, api = api, type = type, shadow = shadow, pos = pos)
         entry.is_type = 1
+        entry.api = api
         if defining:
             self.type_entries.append(entry)
         # here we would set as_variable to an object representing this type
@@ -392,7 +395,7 @@ class Scope(object):
     def declare_typedef(self, name, cname = None, namespace = None, c_visibility = 'private', visibility = 'public', overridable = 0, api = 0,
                             base_type = None, pos = None):
         if not cname:
-            if self.in_cinclude or c_visibility == 'public':
+            if self.in_cinclude or c_visibility == 'public' or api:
                 cname = name
             else:
                 cname = self.mangle(Naming.type_prefix, name)
@@ -411,7 +414,7 @@ class Scope(object):
                                 packed=False, pos = None):
         # Add an entry for a struct or union definition.
         if not cname:
-            if self.in_cinclude or c_visibility == 'public':
+            if self.in_cinclude or c_visibility == 'public' or api:
                 cname = name
             else:
                 cname = self.mangle(Naming.type_prefix, name)
@@ -486,31 +489,28 @@ class Scope(object):
                 entry.name,
                 ("cdef", "ctypedef")[entry.type.typedef_flag]))
 
-    def _check_previous_visibility(self, entry, c_visibility = 'private', visibility = 'public'):
+    def check_previous_visibility(self, entry, name, cname = None, namespace = None, c_visibility = 'private', visibility = 'public', overridable = 0, api = 0, type_name=None,
+                                  pos = None):
         # Compare the visibility of `entry` with a second
         # `visibility`.  If there is a difference, return a string
         # representing the conflicting `entry` visibility, otherwise
         # return an empty string.
-        if c_visibility != entry.c_visibility:
-            return entry.c_visibility
-        if visibility != entry.visibility:
-            return entry.visibility
 
-    def check_previous_visibility(self, entry, name, cname = None, namespace = None, c_visibility = 'private', visibility = 'public', overridable = 0, api = 0, type_name=None,
-                                  pos = None):
+        if not type_name:
+            type_name = type(entry)
+        if c_visibility != entry.c_visibility:
+            error(pos, "%s '%s' C visibility changed from '%s' to '%s'" % (
+                    type_name, entry.name, entry.c_visibility, c_visibility))
+        if visibility != entry.visibility:
+            error(pos, "%s '%s' Python visibility changed from '%s' to %s" % (
+                    type_name, entry.name, entry.visibility, visibility))
         # WTK: check api?  Previous code seems to allow you to set the
         # api flag anywhere.
-        vis_diff = self._check_previous_visibility(entry, c_visibility = c_visibility, visibility = visibility)
-        if vis_diff:
-            if not type_name:
-                type_name = type(entry)
-            error(pos, "%s '%s' previously declared as '%s'" % (
-                    type_name, entry.name, vis_diff))
 
     def declare_enum(self, name, cname = None, namespace = None, c_visibility = 'private', visibility = 'public', overridable = 0, api = 0, typedef_flag = None, pos = None):
         if name:
             if not cname:
-                if self.in_cinclude or c_visibility == 'public':
+                if self.in_cinclude or c_visibility == 'public' or api:
                     cname = name
                 else:
                     cname = self.mangle(Naming.type_prefix, name)
@@ -535,6 +535,7 @@ class Scope(object):
                 error(pos, "C++ class must have a default constructor to be stack allocated")
         entry = self.declare(name = name, cname = cname, namespace = namespace, c_visibility = c_visibility, visibility = visibility, overridable = overridable, api = api, type = type, pos = pos)
         entry.is_variable = 1
+        entry.api = api
         self.control_flow.set_state((), (name, 'initialized'), False)
         return entry
 
@@ -578,8 +579,16 @@ class Scope(object):
 
     def declare_lambda_function(self, name = None, cname = None, namespace = None, c_visibility = 'private', visibility = 'public', overridable = 0, api = 0, pos = None):
         # Add an entry for an anonymous Python function.
+        if not cname:
+            cname = self.mangle(Naming.lambda_func_prefix + u'funcdef_', cname)
+        pymethdef_cname = self.mangle(Naming.lambda_func_prefix + u'methdef_', cname)
+        qualified_name = self.qualify_name(cname)
+
         entry = self.declare_var(name = name, cname = cname, namespace = namespace, c_visibility = c_visibility, visibility = visibility, overridable = overridable, api = api, type = py_object_type, pos = pos)
+
         entry.name = EncodedString(cname)
+        entry.qualified_name = qualified_name
+        entry.pymethdef_cname = pymethdef_cname
         entry.func_cname = cname
         entry.signature = pyfunction_signature
         entry.is_anonymous = True
@@ -601,10 +610,11 @@ class Scope(object):
                 cname = self.mangle(Naming.func_prefix, name)
         entry = self.lookup_here(name)
         if entry:
-            vis_diff = self._check_previous_visibility(entry, c_visibility = c_visibility, visibility = visibility)
-            if vis_diff:
-                warning(pos, "Function '%s' previously declared as '%s'" % (
-                        name, vis_diff), 1)
+            self.check_previous_visibility(
+                entry, name = name, cname = cname, namespace = namespace,
+                c_visibility = c_visibility, visibility = visibility,
+                overridable = overridable, api = api, type_name = 'Function',
+                pos = pos)
             if not entry.type.same_as(type):
                 if c_visibility == 'extern' and entry.c_visibility == 'extern':
                     can_override = False
@@ -754,6 +764,8 @@ class PreImportScope(Scope):
 class BuiltinScope(Scope):
     #  The builtin namespace.
 
+    is_builtin_scope = True
+
     def __init__(self):
         if Options.pre_import is None:
             Scope.__init__(self, "__builtin__", None, None)
@@ -777,7 +789,10 @@ class BuiltinScope(Scope):
             if self.outer_scope is not None:
                 return self.outer_scope.declare_builtin(name = name, cname = cname, namespace = namespace, c_visibility = c_visibility, visibility = visibility, overridable = overridable, api = api, pos = pos)
             else:
-                error(pos, "undeclared name not builtin: %s" % name)
+                if Options.error_on_unknown_names:
+                    error(pos, "undeclared name not builtin: %s" % name)
+                else:
+                    warning(pos, "undeclared name not builtin: %s" % name, 2)
 
     def declare_builtin_cfunction(self, name, cname = None, namespace = None, c_visibility = 'private', visibility = 'public', overridable = 0, api = 0, type = None, python_equiv = None,
                                   utility_code = None):
@@ -824,6 +839,8 @@ class BuiltinScope(Scope):
         var_entry.is_readonly = 1
         var_entry.is_builtin = 1
         var_entry.utility_code = utility_code
+        if Options.cache_builtins:
+            var_entry.is_const = True
         entry.as_variable = var_entry
 
         return type
@@ -933,30 +950,38 @@ class ModuleScope(Scope):
         return self.outer_scope.lookup(name, language_level = self.context.language_level)
 
     def declare_builtin(self, name, cname = None, namespace = None, c_visibility = 'private', visibility = 'public', overridable = 0, api = 0, pos = None):
-        if (not hasattr(builtins, name)
-            and name != 'xrange'):
-            # 'xrange' is special cased in Code.py
+        if not hasattr(builtins, name) \
+               and name not in Code.non_portable_builtins_map \
+               and name not in Code.uncachable_builtins:
             if self.has_import_star:
                 entry = self.declare_var(name = name, cname = cname, namespace = namespace, c_visibility = c_visibility, visibility = visibility, overridable = overridable, api = api, type = py_object_type, pos = pos)
                 return entry
             elif self.outer_scope is not None:
                 return self.outer_scope.declare_builtin(name = name, cname = cname, namespace = namespace, c_visibility = c_visibility, visibility = visibility, overridable = overridable, api = api, pos = pos)
             else:
-                error(pos, "undeclared name not builtin: %s"%name)
+                if Options.error_on_unknown_names:
+                    error(pos, "undeclared name not builtin: %s" % name)
+                else:
+                    warning(pos, "undeclared name not builtin: %s" % name, 2)
+                # unknown - assume it's builtin and look it up at runtime
+                entry = self.declare(name, None, py_object_type, pos, 'private')
+                entry.is_builtin = 1
+                return entry
         if Options.cache_builtins:
             for entry in self.cached_builtins:
                 if entry.name == name:
                     return entry
         entry = self.declare(type = py_object_type, pos = pos)
-        if Options.cache_builtins:
+        if Options.cache_builtins and name not in Code.uncachable_builtins:
             entry.is_builtin = 1
-            entry.is_const = 1
+            entry.is_const = 1 # cached
             entry.name = name
             entry.cname = Naming.builtin_prefix + name
             self.cached_builtins.append(entry)
             self.undeclared_cached_builtins.append(entry)
         else:
             entry.is_builtin = 1
+            entry.name = name
         return entry
 
     def find_module(self, module_name, pos = None):
@@ -1072,8 +1097,8 @@ class ModuleScope(Scope):
         # the non-typedef struct internally to avoid needing forward
         # declarations for anonymous structs.
         if typedef_flag and c_visibility != 'extern':
-            if c_visibility != 'public':
-                warning(pos, "ctypedef only valid for public and extern classes", 2)
+            if not (c_visibility == 'public' or api):
+                warning(pos, "ctypedef only valid for 'extern' , 'public', and 'api'", 2)
             objtypedef_cname = objstruct_cname
             typedef_flag = 0
         else:
@@ -1339,6 +1364,16 @@ class LocalScope(Scope):
             entry = self.global_scope().lookup_target(name)
             self.entries[name] = entry
 
+    def declare_nonlocal(self, name, pos):
+        # Pull entry from outer scope into local scope
+        orig_entry = self.lookup_here(name)
+        if orig_entry and orig_entry.scope is self and not orig_entry.from_closure:
+            error(pos, "'%s' redeclared as nonlocal" % name)
+        else:
+            entry = self.lookup(name)
+            if entry is None or not entry.from_closure:
+                error(pos, "no binding for nonlocal '%s' found" % name)
+
     def lookup(self, name):
         # Look up name in this scope or an enclosing one.
         # Return None if not found.
@@ -1357,6 +1392,7 @@ class LocalScope(Scope):
                 inner_entry.is_variable = True
                 inner_entry.outer_entry = entry
                 inner_entry.from_closure = True
+                inner_entry.is_declared_generic = entry.is_declared_generic
                 self.entries[name] = inner_entry
                 return inner_entry
         return entry
@@ -1387,7 +1423,7 @@ class GeneratorExpressionScope(Scope):
         self.genexp_prefix = "%s%d%s" % (Naming.pyrex_prefix, len(name), name)
 
     def mangle(self, prefix, name):
-        return '%s%s' % (self.genexp_prefix, self.parent_scope.mangle(self, prefix, name))
+        return '%s%s' % (self.genexp_prefix, self.parent_scope.mangle(prefix, name))
 
     def declare_var(self, name, cname = None, namespace = None, c_visibility = 'private', visibility = 'public', overridable = 0, api = 0, type = None, is_cdef = 0, pos = None):
         if type is unspecified_type:
@@ -1403,6 +1439,15 @@ class GeneratorExpressionScope(Scope):
         self.var_entries.append(entry)
         self.entries[name] = entry
         return entry
+
+    def declare_lambda_function(self, name = None, cname = None, namespace = None, c_visibility = 'private', visibility = 'public', overridable = 0, api = 0, pos = None):
+        return self.outer_scope.declare_lambda_function(
+            name = name, cname = cname, namespace = namespace,
+            c_visibility = c_visibility, visibility = visibility,
+            overridable = overridable, api = api, pos = pos)
+
+    def add_lambda_def(self, def_node):
+        return self.outer_scope.add_lambda_def(def_node)
 
 
 class ClosureScope(LocalScope):
@@ -1499,9 +1544,23 @@ class PyClassScope(ClassScope):
         # Add an entry for a class attribute.
         entry = Scope.declare_var(
             self, name, cname = None, namespace = None, c_visibility = 'private', visibility = 'public', overridable = 0, api = 0, type = type, is_cdef = is_cdef, pos = pos)
-        entry.is_pyglobal = 1
+        entry.is_pyglobal = 1 # FIXME: WTF?
         entry.is_pyclass_attr = 1
         return entry
+
+    def declare_nonlocal(self, name, pos):
+        # Pull entry from outer scope into local scope
+        orig_entry = self.lookup_here(name)
+        if orig_entry and orig_entry.scope is self and not orig_entry.from_closure:
+            error(pos, "'%s' redeclared as nonlocal" % name)
+        else:
+            entry = self.lookup(name)
+            if entry is None:
+                error(pos, "no binding for nonlocal '%s' found" % name)
+            else:
+                # FIXME: this works, but it's unclear if it's the
+                # right thing to do
+                self.entries[name] = entry
 
     def add_default_value(self, type):
         return self.outer_scope.add_default_value(type)
@@ -1595,8 +1654,6 @@ class CClassScope(ClassScope):
         if name == "__new__":
             error(pos, "__new__ method of extension type will change semantics "
                 "in a future version of Pyrex and Cython. Use __cinit__ instead.")
-        if c_visibility != 'extern':
-            error(pos, "C class pyfunctions may only be extern")
         entry = self.declare_var(name = name, cname = cname, namespace = namespace, c_visibility = c_visibility, visibility = visibility, overridable = overridable, api = api, type = py_object_type, pos = pos)
         special_sig = get_special_method_signature(name)
         if special_sig:

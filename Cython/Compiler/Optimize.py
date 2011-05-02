@@ -930,7 +930,15 @@ class FlattenInListTransform(Visitor.VisitorTransform, SkipDeclarations):
         conds = []
         temps = []
         for arg in args:
-            if not arg.is_simple():
+            try:
+                # Trial optimisation to avoid redundant temp
+                # assignments.  However, since is_simple() is meant to
+                # be called after type analysis, we ignore any errors
+                # and just play safe in that case.
+                is_simple_arg = arg.is_simple()
+            except Exception:
+                is_simple_arg = False
+            if not is_simple_arg:
                 # must evaluate all non-simple RHS before doing the comparisons
                 arg = UtilNodes.LetRefNode(arg)
                 temps.append(arg)
@@ -1170,11 +1178,12 @@ class EarlyReplaceBuiltinCalls(Visitor.EnvTransform):
             self.yield_nodes = []
 
         visit_Node = Visitor.TreeVisitor.visitchildren
-        def visit_YieldExprNode(self, node):
+        # XXX: disable inlining while it's not back supported
+        def __visit_YieldExprNode(self, node):
             self.yield_nodes.append(node)
             self.visitchildren(node)
 
-        def visit_ExprStatNode(self, node):
+        def __visit_ExprStatNode(self, node):
             self.visitchildren(node)
             if node.expr in self.yield_nodes:
                 self.yield_stat_nodes[node.expr] = node
@@ -1601,6 +1610,15 @@ class OptimizeBuiltinCalls(Visitor.EnvTransform):
         self.visitchildren(node)
         if node.type == node.operand.type:
             return node.operand
+        return node
+
+    def visit_ExprStatNode(self, node):
+        """
+        Drop useless coercions.
+        """
+        self.visitchildren(node)
+        if isinstance(node.expr, ExprNodes.CoerceToPyTypeNode):
+            node.expr = node.expr.arg
         return node
 
     def visit_CoerceToBooleanNode(self, node):
@@ -2145,7 +2163,7 @@ class OptimizeBuiltinCalls(Visitor.EnvTransform):
     _handle_simple_method_list_pop = _handle_simple_method_object_pop
 
     single_param_func_type = PyrexTypes.CFuncType(
-        PyrexTypes.c_int_type, [
+        PyrexTypes.c_returncode_type, [
             PyrexTypes.CFuncTypeArg("obj", PyrexTypes.py_object_type, None),
             ],
         exception_value = "-1")
@@ -2157,7 +2175,7 @@ class OptimizeBuiltinCalls(Visitor.EnvTransform):
             return node
         return self._substitute_method_call(
             node, "PyList_Sort", self.single_param_func_type,
-            'sort', is_unbound_method, args)
+            'sort', is_unbound_method, args).coerce_to(node.type, self.current_env)
 
     Pyx_PyDict_GetItem_func_type = PyrexTypes.CFuncType(
         PyrexTypes.py_object_type, [
@@ -3119,6 +3137,15 @@ class ConstantFolding(Visitor.VisitorTransform, SkipDeclarations):
         bool_result = bool(node.constant_result)
         return ExprNodes.BoolNode(node.pos, value=bool_result,
                                   constant_result=bool_result)
+
+    def visit_CondExprNode(self, node):
+        self._calculate_const(node)
+        if node.test.constant_result is ExprNodes.not_a_constant:
+            return node
+        if node.test.constant_result:
+            return node.true_val
+        else:
+            return node.false_val
 
     def visit_IfStatNode(self, node):
         self.visitchildren(node)

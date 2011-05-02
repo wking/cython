@@ -1,4 +1,4 @@
-# cython: infer_types=True, language_level=3
+# cython: infer_types=True, language_level=3, py2_import=True
 #
 #   Cython Scanner
 #
@@ -36,7 +36,7 @@ def get_lexicon():
 #------------------------------------------------------------------
 
 py_reserved_words = [
-    "global", "def", "class", "print", "del", "pass", "break",
+    "global", "nonlocal", "def", "class", "print", "del", "pass", "break",
     "continue", "return", "raise", "import", "exec", "try",
     "except", "finally", "while", "if", "elif", "else", "for",
     "in", "assert", "and", "or", "not", "is", "in", "lambda",
@@ -45,7 +45,7 @@ py_reserved_words = [
 
 pyx_reserved_words = py_reserved_words + [
     "include", "ctypedef", "cdef", "cpdef",
-    "cimport", "by", "DEF", "IF", "ELIF", "ELSE"
+    "cimport", "DEF", "IF", "ELIF", "ELSE"
 ]
 
 class Method(object):

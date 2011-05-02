@@ -1,3 +1,5 @@
+# mode: error
+
 cdef enum Spam:
 	a, b, c
 
@@ -6,5 +8,5 @@ cdef void f():
 	a = 42      # assignment to non-lvalue
 
 _ERRORS = u"""
-6:3: Assignment to non-lvalue 'a'
+8:3: Assignment to non-lvalue 'a'
 """

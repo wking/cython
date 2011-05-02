@@ -1,3 +1,6 @@
+# mode: run
+# tag: closures
+# ticket: 598
 # cython: language_level=3
 
 def list_comp_in_closure():

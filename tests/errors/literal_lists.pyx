@@ -1,3 +1,5 @@
+# mode: error
+
 def f():
     cdef int* p
     if false():
@@ -7,5 +9,5 @@ def false():
     return False
 
 _ERRORS = u"""
-4:10: Literal list must be assigned to pointer at time of declaration
+6:10: Literal list must be assigned to pointer at time of declaration
 """

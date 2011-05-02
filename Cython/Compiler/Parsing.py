@@ -1,4 +1,4 @@
-# cython: auto_cpdef=True, infer_types=True, language_level=3
+# cython: auto_cpdef=True, infer_types=True, language_level=3, py2_import=True
 #
 #   Pyrex Parser
 #
@@ -644,7 +644,7 @@ def p_atom(s):
             return ExprNodes.BoolNode(pos, value=True)
         elif name == "False":
             return ExprNodes.BoolNode(pos, value=False)
-        elif name == "NULL":
+        elif name == "NULL" and not s.in_python_file:
             return ExprNodes.NullNode(pos)
         else:
             return p_name(s, name)
@@ -1074,6 +1074,12 @@ def p_global_statement(s):
     names = p_ident_list(s)
     return Nodes.GlobalNode(pos, names = names)
 
+def p_nonlocal_statement(s):
+    pos = s.position()
+    s.next()
+    names = p_ident_list(s)
+    return Nodes.NonlocalNode(pos, names = names)
+
 def p_expression_or_assignment(s):
     expr_list = [p_testlist_star_expr(s)]
     while s.sy == '=':
@@ -1195,6 +1201,7 @@ def p_raise_statement(s):
     exc_type = None
     exc_value = None
     exc_tb = None
+    cause = None
     if s.sy not in statement_terminators:
         exc_type = p_test(s)
         if s.sy == ',':
@@ -1203,11 +1210,15 @@ def p_raise_statement(s):
             if s.sy == ',':
                 s.next()
                 exc_tb = p_test(s)
+        elif s.sy == 'from':
+            s.next()
+            cause = p_test(s)
     if exc_type or exc_value or exc_tb:
         return Nodes.RaiseStatNode(pos,
             exc_type = exc_type,
             exc_value = exc_value,
-            exc_tb = exc_tb)
+            exc_tb = exc_tb,
+            cause = cause)
     else:
         return Nodes.ReraiseStatNode(pos)
 
@@ -1239,6 +1250,7 @@ def p_import_statement(s):
                 rhs = ExprNodes.ImportNode(pos,
                     module_name = ExprNodes.IdentifierStringNode(
                         pos, value = dotted_name),
+                    level = None,
                     name_list = name_list))
         stats.append(stat)
     return Nodes.StatListNode(pos, stats = stats)
@@ -1247,13 +1259,31 @@ def p_from_import_statement(s, first_statement = 0):
     # s.sy == 'from'
     pos = s.position()
     s.next()
-    (dotted_name_pos, _, dotted_name, _) = \
-        p_dotted_name(s, as_allowed = 0)
+    if s.sy == '.':
+        # count relative import level
+        level = 0
+        while s.sy == '.':
+            level += 1
+            s.next()
+        if s.sy == 'cimport':
+            s.error("Relative cimport is not supported yet")
+    else:
+        level = None
+    if level is not None and s.sy == 'import':
+        # we are dealing with "from .. import foo, bar"
+        dotted_name_pos, dotted_name = s.position(), ''
+    elif level is not None and s.sy == 'cimport':
+        # "from .. cimport"
+        s.error("Relative cimport is not supported yet")
+    else:
+        (dotted_name_pos, _, dotted_name, _) = \
+            p_dotted_name(s, as_allowed = 0)
     if s.sy in ('import', 'cimport'):
         kind = s.sy
         s.next()
     else:
         s.error("Expected 'import' or 'cimport'")
+
     is_cimport = kind == 'cimport'
     is_parenthesized = False
     if s.sy == '*':
@@ -1275,6 +1305,8 @@ def p_from_import_statement(s, first_statement = 0):
     if dotted_name == '__future__':
         if not first_statement:
             s.error("from __future__ imports must occur at the beginning of the file")
+        elif level is not None:
+            s.error("invalid syntax")
         else:
             for (name_pos, name, as_name, kind) in imported_names:
                 if name == "braces":
@@ -1308,6 +1340,7 @@ def p_from_import_statement(s, first_statement = 0):
         return Nodes.FromImportStatNode(pos,
             module = ExprNodes.ImportNode(dotted_name_pos,
                 module_name = ExprNodes.IdentifierStringNode(pos, value = dotted_name),
+                level = level,
                 name_list = import_list),
             items = items)
 
@@ -1455,7 +1488,7 @@ def p_for_from_relation(s):
         s.error("Expected one of '<', '<=', '>' '>='")
 
 def p_for_from_step(s):
-    if s.sy == 'by':
+    if s.sy == 'IDENT' and s.systring == 'by':
         s.next()
         step = p_bit_expr(s)
         return step
@@ -1627,6 +1660,8 @@ def p_simple_statement(s, first_statement = 0):
     #print "p_simple_statement:", s.sy, s.systring ###
     if s.sy == 'global':
         node = p_global_statement(s)
+    elif s.sy == 'nonlocal':
+        node = p_nonlocal_statement(s)
     elif s.sy == 'print':
         node = p_print_statement(s)
     elif s.sy == 'exec':
@@ -1659,15 +1694,27 @@ def p_simple_statement_list(s, ctx, first_statement = 0):
     # Parse a series of simple statements on one line
     # separated by semicolons.
     stat = p_simple_statement(s, first_statement = first_statement)
-    if s.sy == ';':
-        stats = [stat]
-        while s.sy == ';':
-            #print "p_simple_statement_list: maybe more to follow" ###
-            s.next()
-            if s.sy in ('NEWLINE', 'EOF'):
-                break
-            stats.append(p_simple_statement(s))
-        stat = Nodes.StatListNode(stats[0].pos, stats = stats)
+    pos = stat.pos
+    stats = []
+    if not isinstance(stat, Nodes.PassStatNode):
+        stats.append(stat)
+    while s.sy == ';':
+        #print "p_simple_statement_list: maybe more to follow" ###
+        s.next()
+        if s.sy in ('NEWLINE', 'EOF'):
+            break
+        stat = p_simple_statement(s, first_statement = first_statement)
+        if isinstance(stat, Nodes.PassStatNode):
+            continue
+        stats.append(stat)
+        first_statement = False
+
+    if not stats:
+        stat = Nodes.PassStatNode(pos)
+    elif len(stats) == 1:
+        stat = stats[0]
+    else:
+        stat = Nodes.StatListNode(pos, stats = stats)
     s.expect_newline("Syntax error in simple statement list")
     return stat
 
@@ -1826,9 +1873,14 @@ def p_statement_list(s, ctx, first_statement = 0):
     pos = s.position()
     stats = []
     while s.sy not in ('DEDENT', 'EOF'):
-        stats.append(p_statement(s, ctx, first_statement = first_statement))
-        first_statement = 0
-    if len(stats) == 1:
+        stat = p_statement(s, ctx, first_statement = first_statement)
+        if isinstance(stat, Nodes.PassStatNode):
+            continue
+        stats.append(stat)
+        first_statement = False
+    if not stats:
+        return Nodes.PassStatNode(pos)
+    elif len(stats) == 1:
         return stats[0]
     else:
         return Nodes.StatListNode(pos, stats = stats)
@@ -2053,7 +2105,7 @@ def looking_at_expr(s):
             is_type = True
         elif s.sy == '*' or s.sy == '**':
             s.next()
-            is_type = s.sy == ')'
+            is_type = s.sy in (')', ']')
             s.put_back(*saved)
         elif s.sy == '(':
             s.next()
@@ -2437,7 +2489,8 @@ def p_c_enum_definition(s, pos, ctx):
     return Nodes.CEnumDefNode(
         pos, name = name, cname = cname, items = items,
         typedef_flag = ctx.typedef_flag, c_visibility = ctx.c_visibility,
-        visibility = ctx.visibility, in_pxd = ctx.level == 'module_pxd')
+        visibility = ctx.visibility, api = ctx.api,
+        in_pxd = ctx.level == 'module_pxd')
 
 def p_c_enum_line(s, ctx, items):
     if s.sy != 'pass':
@@ -2499,7 +2552,7 @@ def p_c_struct_or_union_definition(s, pos, ctx):
         s.expect_dedent()
     else:
         s.expect_newline("Syntax error in struct or union definition")
-    return Nodes.CStructOrUnionDefNode(pos,
+    return Nodes.CStructOrUnionDefNode(pos = pos,
         name = name,
         cname = cname,
         kind = kind,
@@ -2509,6 +2562,7 @@ def p_c_struct_or_union_definition(s, pos, ctx):
         overridable = ctx.overridable,
         c_visibility = ctx.c_visibility,
         visibility = ctx.visibility,
+        api = ctx.api,
         in_pxd = ctx.level == 'module_pxd',
         packed = packed)
 
@@ -2621,7 +2675,7 @@ def p_ctypedef_statement(s, pos, ctx):
         return Nodes.CTypeDefNode(
             pos, base_type = base_type, declarator = declarator,
             c_visibility = ctx.c_visibility, visibility = ctx.visibility,
-            in_pxd = ctx.level == 'module_pxd')
+            api = ctx.api, in_pxd = ctx.level == 'module_pxd')
 
 def p_decorators(s):
     decorators = []
@@ -2747,8 +2801,8 @@ def p_c_class_definition(s, pos,  ctx, decorators=None):
         base_class_module = ".".join(base_class_path[:-1])
         base_class_name = base_class_path[-1]
     if s.sy == '[':
-        if ctx.c_visibility not in ('extern', 'public'):
-            error(s.position(), "Name options only allowed for 'public' or 'extern' C class")
+        if ctx.c_visibility not in ('public', 'extern') and not ctx.api:
+            error(s.position(), "Name options only allowed for 'public', 'api', or 'extern' C class")
         objstruct_name, typeobj_name = p_c_class_options(s)
     if s.sy == ':':
         if ctx.level == 'module_pxd':
@@ -2776,7 +2830,10 @@ def p_c_class_definition(s, pos,  ctx, decorators=None):
             error(pos, "Type object name specification required for 'public' C class")
     elif ctx.c_visibility == 'private':
         if ctx.api:
-            error(pos, "Only 'public' C class can be declared 'api'")
+            if not objstruct_name:
+                error(pos, "Object struct name specification required for 'api' C class")
+            if not typeobj_name:
+                error(pos, "Type object name specification required for 'api' C class")
     else:
         error(pos, "Invalid class visibility '%s'" % ctx.visibility_string())
     return Nodes.CClassDefNode(pos,
@@ -2842,7 +2899,7 @@ def p_code(s, level=None):
             repr(s.sy), repr(s.systring)))
     return body
 
-COMPILER_DIRECTIVE_COMMENT_RE = re.compile(r"^#\s*cython:\s*((\w|[.])+\s*=.*)$")
+COMPILER_DIRECTIVE_COMMENT_RE = re.compile(r"^#\s*cython\s*:\s*((\w|[.])+\s*=.*)$")
 
 def p_compiler_directive_comments(s):
     result = {}

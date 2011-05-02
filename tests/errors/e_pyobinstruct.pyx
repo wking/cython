@@ -1,3 +1,5 @@
+# mode: error
+
 cdef object x
 
 cdef struct spam:
@@ -7,5 +9,5 @@ def f():
 	cdef spam s
 	s.parrot = x
 _ERRORS = u"""
-4:8: C struct/union member cannot be a Python object
+6:8: C struct/union member cannot be a Python object
 """

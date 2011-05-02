@@ -1,3 +1,4 @@
+# mode: error
 
 cdef class Test:
     cdef __cinit__(self):
@@ -7,6 +8,6 @@ cdef class Test:
         pass
 
 _ERRORS = u"""
-3:4: Special methods must be declared with 'def', not 'cdef'
-6:4: Special methods must be declared with 'def', not 'cdef'
+4:4: Special methods must be declared with 'def', not 'cdef'
+7:4: Special methods must be declared with 'def', not 'cdef'
 """

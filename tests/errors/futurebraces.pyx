@@ -1,5 +1,7 @@
+# mode: error
+
 from __future__ import braces
 
 _ERRORS = u"""
-1:23: not a chance
+3:23: not a chance
 """
